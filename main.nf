@@ -1,0 +1,196 @@
+nextflow.enable.dsl=2
+
+params.bam                 = null        // input RNA‑seq BAM (spliced alignments)
+params.gtf                 = null        // gene annotation (same build as BAM)
+params.genes               = null        // text file: one Ensembl gene ID per line
+params.genome_package      = 'BSgenome.Hsapiens.UCSC.hg38' // 'BSgenome.Hsapiens.UCSC.hg38' choose the genome that matches the bam file, Bioconductor genome
+params.fasta               = null        // optional: genome FASTA file (alternative to BSgenome)
+params.pad                 = 60          // ±bp around peak
+params.smooth_k            = 31          // smoothing window (odd integer)
+params.sliding_window      = false       // enable sliding-window selection when QC fails
+params.min_window_mean     = null        // minimum required mean coverage across window (absolute value)
+params.min_window_mean_pct = null        // minimum window mean as % of gene peak coverage (overrides min_window_mean)
+params.max_gap             = null        // maximum allowed longest zero-coverage run (null to disable)
+params.search_slop         = 1000        // extra bases for BigWig import per chromosome
+params.trim_to_exon        = false       // trim final window to the exon containing the peak
+params.min_exonic_fraction = null        // minimum required exonic fraction of window (0-1)
+params.primer3_settings    = 'config/primer3_settings.txt' // default settings
+params.outdir              = 'results'
+
+process BAM_INDEX {
+  tag "$bam.baseName"
+  publishDir params.outdir, mode: 'copy', pattern: '*.bai'
+  conda "samtools=1.19"
+
+  input:
+  path bam
+
+  output:
+  path "${bam}.bai"
+
+  script:
+  """
+  samtools index -@ 4 ${bam}
+  """
+}
+
+process MEGADEPTH_BW {
+  tag "$bam.baseName"
+  publishDir params.outdir, mode: 'copy', pattern: '*.bw'
+  conda "megadepth=1.2.* samtools=1.19"
+
+  input:
+  path bam
+  path bai
+
+  output:
+  path "${bam.baseName}.bw"
+
+  script:
+  """
+  megadepth ${bam} --bigwig --prefix ${bam.baseName}
+  # List files to see what was actually created
+  ls -la *.bw
+  # Find the correct output file and rename it
+  if [ -f "${bam.baseName}.all.bw" ]; then
+    mv ${bam.baseName}.all.bw ${bam.baseName}.bw
+  elif [ -f "${bam.baseName}.coverage.bw" ]; then
+    mv ${bam.baseName}.coverage.bw ${bam.baseName}.bw
+  elif [ -f "coverage.bw" ]; then
+    mv coverage.bw ${bam.baseName}.bw
+  else
+    echo "Available files:"
+    ls -la
+    exit 1
+  fi
+  """
+}
+
+process PICK_PEAKS {
+  tag "$bw.baseName"
+  publishDir params.outdir, mode: 'copy'
+  conda "r-base>=4.3 r-essentials bioconductor-derfinder bioconductor-genomicfeatures bioconductor-genomicranges bioconductor-rtracklayer bioconductor-iranges bioconductor-s4vectors bioconductor-bsgenome bioconductor-bsgenome.hsapiens.ucsc.hg38 bioconductor-rsamtools bioconductor-txdbmaker r-optparse"
+
+  input:
+  path bw
+  path gtf
+  path genes
+  path fasta
+
+  output:
+  path "primer_targets.fa"
+  path "primer_targets.bed"
+  path "peaks.tsv"
+  path "qc_coverage_summary.tsv"
+
+  script:
+  def fasta_arg = fasta.name != 'NO_FILE' ? "--fasta ${fasta}" : ""
+  def sw_flag = params.sliding_window ? "--sliding_window" : ""
+  def minmean_arg = params.min_window_mean != null ? "--min_window_mean ${params.min_window_mean}" : ""
+  def minmean_pct_arg = params.min_window_mean_pct != null ? "--min_window_mean_pct ${params.min_window_mean_pct}" : ""
+  def maxgap_arg = params.max_gap != null ? "--max_gap ${params.max_gap}" : ""
+  def slop_arg = params.search_slop != null ? "--search_slop ${params.search_slop}" : ""
+  def trim_arg = params.trim_to_exon ? "--trim_to_exon" : ""
+  def min_exonic_arg = params.min_exonic_fraction != null ? "--min_exonic_fraction ${params.min_exonic_fraction}" : ""
+  """
+  Rscript ${projectDir}/bin/pick_peaks.R \
+    --bw ${bw} \
+    --gtf ${gtf} \
+    --genes ${genes} \
+    --genome ${params.genome_package} \
+    ${fasta_arg} \
+    --pad ${params.pad} \
+    --smooth_k ${params.smooth_k} \
+    ${sw_flag} \
+    ${minmean_arg} \
+    ${minmean_pct_arg} \
+    ${maxgap_arg} \
+    ${slop_arg} \
+  ${trim_arg} \
+  ${min_exonic_arg} \
+    --out_fa primer_targets.fa \
+    --out_bed primer_targets.bed \
+    --out_peaks peaks.tsv \
+    --out_qc qc_coverage_summary.tsv
+  """
+}
+
+process MAKE_PRIMER3_INPUT {
+  tag "$targets.baseName"
+  publishDir params.outdir, mode: 'copy'
+  conda "python>=3.10 primer3=2.6.*"
+
+  input:
+  path targets
+  path p3_settings
+
+  output:
+  path "primer3_input.txt"
+
+  script:
+  """
+  python ${projectDir}/bin/fasta_to_primer3.py --fasta ${targets} --settings ${p3_settings} --out primer3_input.txt
+  """
+}
+
+process RUN_PRIMER3 {
+  tag 'primer3'
+  publishDir params.outdir, mode: 'copy'
+  conda "python>=3.10 primer3=2.6.*"
+
+  input:
+  path p3in
+
+  output:
+  path 'primer3_output.txt'
+
+  script:
+  """
+  primer3_core < ${p3in} > primer3_output.txt
+  """
+}
+
+workflow {
+  // Validate required parameters
+  if (!params.bam) error "Missing required parameter: --bam"
+  if (!params.gtf) error "Missing required parameter: --gtf" 
+  if (!params.genes) error "Missing required parameter: --genes"
+  
+  // Create input channels
+  bam_ch = Channel.fromPath(params.bam, checkIfExists: true)
+  gtf_ch = Channel.fromPath(params.gtf, checkIfExists: true)
+  genes_ch = Channel.fromPath(params.genes, checkIfExists: true)
+  
+  // Handle optional FASTA input
+  if (params.fasta) {
+    fasta_ch = Channel.fromPath(params.fasta, checkIfExists: true)
+  } else {
+    // Create a dummy file for when no FASTA is provided
+    fasta_ch = Channel.value(file('NO_FILE'))
+  }
+
+  main:
+    // Ensure BAM is indexed
+    index_bam = BAM_INDEX(bam_ch)
+
+    // BigWig from BAM
+    bw = MEGADEPTH_BW(bam_ch, index_bam)
+
+    // Isoform‑agnostic peak picking (union of exons)
+    PICK_PEAKS(bw, gtf_ch, genes_ch, fasta_ch)
+    primer_targets_fa = PICK_PEAKS.out[0]
+    primer_targets_bed = PICK_PEAKS.out[1]
+    peaks_tsv = PICK_PEAKS.out[2]
+    qc_summary = PICK_PEAKS.out[3]
+
+    // Primer3 input + run
+    p3in = MAKE_PRIMER3_INPUT(primer_targets_fa, file(params.primer3_settings))
+    RUN_PRIMER3(p3in)
+
+  emit:
+    bw
+    primer_targets_fa
+    primer_targets_bed
+    peaks_tsv
+    qc_summary
+}

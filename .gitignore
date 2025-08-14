@@ -1,0 +1,124 @@
+# Nextflow pipeline files
+.nextflow/
+.nextflow.log*
+work/
+timeline.html
+report.html
+trace.txt
+dag.dot
+
+# Results and output directories
+results/
+results_*/
+output/
+outputs/
+
+# Test data (may be large)
+testdata/*.bam
+testdata/*.bai
+testdata/*.bw
+testdata/*.fa
+testdata/*.fasta
+testdata/*.gtf
+testdata/*.gff
+
+# Conda/Mamba environments
+envs/
+.conda/
+.mamba/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# R files
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+*.Rout
+
+# Job scheduler files
+*.o[0-9]*
+*.e[0-9]*
+*.po[0-9]*
+*.pe[0-9]*
+slurm-*.out
+*.sbatch
+*.pbs
+RunJob.sh
+job_*.sh
+
+# Log files
+*.log
+*.out
+*.err
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Large genome files (add specific patterns as needed)
+*.fa
+*.fasta
+*.fna
+*.fa.gz
+*.fasta.gz
+*.2bit
+*.dict
+
+# Large annotation files
+*.gtf
+*.gff
+*.gff3
+*.bed
+*.gtf.gz
+*.gff.gz
+
+# BigWig/BigBed files
+*.bw
+*.bigwig
+*.bb
+*.bigbed
+
+# BAM/SAM files
+*.bam
+*.bam.bai
+*.bai
+*.sam
+
+# Coverage files
+*.bedgraph
+*.bg
+*.wig
+
+# Backup files
+*.bak
+*.backup
+*_backup
+*_old
+
+# Documentation build
+docs/_build/
