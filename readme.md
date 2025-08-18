@@ -41,6 +41,8 @@ nextflow run main.nf -profile conda \
   --sliding_window true \
   --min_window_mean_pct 25 \
   --trim_to_exon true \
+  --trim_low_coverage_pct 10 \
+  --transcriptome_fasta human_transcriptome.fa \
   --outdir results
 ```
 
@@ -112,8 +114,52 @@ ENSG00000157764
 - `primer_targets.fa` – FASTA with one 120‑nt sequence per gene (`>GENE|chr:start-end(strand)`).
 - `primer_targets.bed` – BED coordinates of each target window.
 - `peaks.tsv` – Chosen window per gene (gene, chr, start, end, strand).
+- `primer3_output.txt` – Complete Primer3 results with all primer pairs.
+- `cdna_primers.tsv` – **Strand-appropriate primers complementary to cDNA** (RIGHT primers for negative-strand genes, LEFT primers for positive-strand genes).
+- `primers_for_alignment.fa` – FASTA file of selected primers for transcriptome alignment QC.
+- `primer_alignment_report.tsv` – **Primer specificity report** (if `--transcriptome_fasta` provided).
+- `primers_alignment.bam` – Bowtie2 alignment of primers to transcriptome (if transcriptome provided).
 - `qc_coverage_summary.tsv` – Per‑gene coverage summary (total exonic bases, max/mean/median).
-- `primer3_input.txt` / `primer3_output.txt` – Primer3 request/response.
+- `primer3_input.txt` – Primer3 input file for manual inspection.
+
+### Understanding `cdna_primers.tsv`
+
+This file contains only the primers that will be complementary to the cDNA during RT-PCR:
+
+- **Negative-strand genes**: Uses RIGHT primers (these anneal to the reference genome sequence = mRNA)
+- **Positive-strand genes**: Uses LEFT primers (these anneal to the reference genome sequence = mRNA)
+
+**Biological rationale**: 
+- Template sequences for negative-strand genes are reverse complements of the reference genome
+- Template sequences for positive-strand genes match the reference genome
+- We want primers that match the mRNA (= reference genome sequence for both cases)
+
+**Example:**
+```tsv
+gene_id                primer_index  primer_type  primer_sequence           gene_strand
+ENSG00000008988       0             RIGHT        CGTGCGGACCAAAAATCCTC      -
+ENSG00000125356       0             LEFT         TTCGAGATTCTCCCCGGACT      +
+```
+
+### Primer Quality Control via Transcriptome Alignment
+
+**Optional but recommended**: Provide a human transcriptome FASTA to validate primer specificity:
+
+```bash
+nextflow run main.nf \
+  --bam sample.bam \
+  --gtf genes.gtf \
+  --genes target_genes.txt \
+  --transcriptome_fasta human_transcriptome.fa \
+  --max_primers_per_gene 3
+```
+
+**Quality metrics in `primer_alignment_report.tsv`**:
+- `PERFECT`: Primer aligns uniquely to transcriptome (ideal)
+- `GOOD`: Primer has 2-5 alignments (acceptable) 
+- `MODERATE`: Primer has 6-20 alignments (use with caution)
+- `POOR`: Primer has >20 alignments (likely non-specific)
+- `FAIL`: Primer has no alignments (may not work)
 
 ---
 
@@ -217,6 +263,9 @@ The pipeline ships with Conda envs for all steps. Use `-profile conda` to auto�
 | Name                      | Type   | Default | Description                                                                    |
 | ------------------------- | ------ | ------- | ------------------------------------------------------------------------------ |
 | `--trim_to_exon`          | bool   | false   | Trim final window to boundaries of exon containing the peak.                   |
+| `--trim_low_coverage_pct` | float  | null    | After window selection, trim ends with coverage below X% of window peak (0-100, e.g. 10). |
+| `--transcriptome_fasta`   | path   | null    | Human transcriptome FASTA for primer specificity validation (optional). |
+| `--max_primers_per_gene`  | int    | 3       | Maximum primers per gene for alignment QC (reduces computational load). |
 | `--min_exonic_fraction`   | float  | null    | Minimum required fraction (0-1) of window overlapping exons. Flags failures but still reports. |
 
 ### Usage Examples

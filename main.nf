@@ -13,7 +13,11 @@ params.min_window_mean_pct = null        // minimum window mean as % of gene pea
 params.max_gap             = null        // maximum allowed longest zero-coverage run (null to disable)
 params.search_slop         = 1000        // extra bases for BigWig import per chromosome
 params.trim_to_exon        = false       // trim final window to the exon containing the peak
+params.trim_low_coverage_pct = null     // trim window ends with coverage below X% of window peak (0-100)
 params.min_exonic_fraction = null        // minimum required exonic fraction of window (0-1)
+params.transcriptome_index = null        // bowtie2 index prefix for human transcriptome (e.g., 'transcriptome_idx')
+params.transcriptome_fasta = null        // transcriptome FASTA file for gene name mapping in alignment analysis
+params.max_primers_per_gene = 3          // maximum primers per gene for alignment QC
 params.primer3_settings    = 'config/primer3_settings.txt' // default settings
 params.outdir              = 'results'
 
@@ -91,6 +95,7 @@ process PICK_PEAKS {
   def maxgap_arg = params.max_gap != null ? "--max_gap ${params.max_gap}" : ""
   def slop_arg = params.search_slop != null ? "--search_slop ${params.search_slop}" : ""
   def trim_arg = params.trim_to_exon ? "--trim_to_exon" : ""
+  def trim_cov_arg = params.trim_low_coverage_pct != null ? "--trim_low_coverage_pct ${params.trim_low_coverage_pct}" : ""
   def min_exonic_arg = params.min_exonic_fraction != null ? "--min_exonic_fraction ${params.min_exonic_fraction}" : ""
   """
   Rscript ${projectDir}/bin/pick_peaks.R \
@@ -107,6 +112,7 @@ process PICK_PEAKS {
     ${maxgap_arg} \
     ${slop_arg} \
   ${trim_arg} \
+  ${trim_cov_arg} \
   ${min_exonic_arg} \
     --out_fa primer_targets.fa \
     --out_bed primer_targets.bed \
@@ -150,6 +156,108 @@ process RUN_PRIMER3 {
   """
 }
 
+process EXTRACT_CDNA_PRIMERS {
+  tag 'extract_cdna_primers'
+  publishDir params.outdir, mode: 'copy'
+  conda "r-base>=4.3 r-essentials r-optparse"
+
+  input:
+  path primer3_output
+  path peaks_tsv
+
+  output:
+  path 'cdna_primers.tsv'
+
+  script:
+  """
+  Rscript ${projectDir}/bin/extract_cdna_primers.R \
+    --primer3_output ${primer3_output} \
+    --peaks_tsv ${peaks_tsv} \
+    --out_tsv cdna_primers.tsv
+  """
+}
+
+process PRIMERS_TO_FASTA {
+  tag 'primers_to_fasta'
+  publishDir params.outdir, mode: 'copy'
+  conda "r-base>=4.3 r-essentials bioconductor-biostrings r-optparse"
+
+  input:
+  path primers_tsv
+
+  output:
+  path 'primers_for_alignment.fa'
+
+  script:
+  def max_primers_arg = params.max_primers_per_gene ? "--max_primers_per_gene ${params.max_primers_per_gene}" : ""
+  """
+  Rscript ${projectDir}/bin/primers_to_fasta.R \
+    --primers_tsv ${primers_tsv} \
+    --out_fasta primers_for_alignment.fa \
+    ${max_primers_arg}
+  """
+}
+
+process ALIGN_PRIMERS_TRANSCRIPTOME {
+  tag 'bowtie2_alignment'
+  publishDir params.outdir, mode: 'copy'
+  conda "bowtie2=2.5.* samtools=1.19"
+
+  input:
+  path primers_fasta
+  val transcriptome_index_prefix
+
+  output:
+  path 'primers_alignment.bam'
+  path 'primers_alignment.bam.bai'
+  path 'alignment_stats.txt'
+
+  when:
+  transcriptome_index_prefix != 'NO_INDEX'
+
+  script:
+  """
+  # Align primers to transcriptome - report all alignments
+  bowtie2 -f -x ${transcriptome_index_prefix} -U ${primers_fasta} -S primers_alignment.sam -a 2> alignment_stats.txt
+  
+  # Convert to BAM and sort
+  samtools view -bS primers_alignment.sam | samtools sort -o primers_alignment.bam
+  
+  # Index BAM file
+  samtools index primers_alignment.bam
+  
+  # Clean up intermediate files
+  rm primers_alignment.sam
+  """
+}
+
+process ANALYZE_PRIMER_ALIGNMENTS {
+  tag 'alignment_analysis'
+  publishDir params.outdir, mode: 'copy'
+  conda "python=3.9 biopython=1.79 pandas=1.5.* pysam=0.21.*"
+
+  input:
+  path alignment_bam
+  path alignment_bai
+  path primers_tsv
+  path transcriptome_fasta
+
+  output:
+  path 'primer_alignment_report.tsv'
+  path 'primer_alignment_summary.tsv'
+
+  script:
+  def transcriptome_arg = transcriptome_fasta.name != 'NO_FILE' ? "--transcriptome_fasta ${transcriptome_fasta}" : ""
+  """
+  python ${projectDir}/bin/analyze_primer_alignments.py \
+    --alignment_bam ${alignment_bam} \
+    --primers_tsv ${primers_tsv} \
+    ${transcriptome_arg} \
+    --out_report primer_alignment_report.tsv \
+    --out_summary primer_alignment_summary.tsv
+  """
+}
+
 workflow {
   // Validate required parameters
   if (!params.bam) error "Missing required parameter: --bam"
@@ -169,6 +277,22 @@ workflow {
     fasta_ch = Channel.value(file('NO_FILE'))
   }
 
+  // Handle optional transcriptome index for primer alignment QC
+  if (params.transcriptome_index) {
+    // Validate that index files exist
+    transcriptome_index_files = Channel.fromPath("${params.transcriptome_index}.*.bt2", checkIfExists: true).collect()
+    transcriptome_index_prefix = params.transcriptome_index
+  } else {
+    transcriptome_index_prefix = 'NO_INDEX'
+  }
+
+  // Handle optional transcriptome FASTA for gene name mapping
+  if (params.transcriptome_fasta) {
+    transcriptome_fasta_ch = Channel.fromPath(params.transcriptome_fasta, checkIfExists: true)
+  } else {
+    transcriptome_fasta_ch = Channel.value(file('NO_FILE'))
+  }
+
   main:
     // Ensure BAM is indexed
     index_bam = BAM_INDEX(bam_ch)
@@ -185,7 +309,24 @@ workflow {
 
     // Primer3 input + run
     p3in = MAKE_PRIMER3_INPUT(primer_targets_fa, file(params.primer3_settings))
-    RUN_PRIMER3(p3in)
+    primer3_output = RUN_PRIMER3(p3in)
+
+    // Extract cDNA-complementary primers
+    cdna_primers = EXTRACT_CDNA_PRIMERS(primer3_output, peaks_tsv)
+
+    // Convert primers to FASTA for alignment
+    primers_fasta = PRIMERS_TO_FASTA(cdna_primers)
+
+    // Optional: Align primers to transcriptome for specificity check
+    if (transcriptome_index_prefix != 'NO_INDEX') {
+      alignment_results = ALIGN_PRIMERS_TRANSCRIPTOME(primers_fasta, transcriptome_index_prefix)
+      primer_alignment_report = ANALYZE_PRIMER_ALIGNMENTS(
+        alignment_results[0], // BAM file
+        alignment_results[1], // BAI file  
+        cdna_primers,
+        transcriptome_fasta_ch
+      )
+    }
 
   emit:
     bw
@@ -193,4 +334,7 @@ workflow {
     primer_targets_bed
     peaks_tsv
     qc_summary
+    primer3_output
+    cdna_primers
+    primers_fasta
 }

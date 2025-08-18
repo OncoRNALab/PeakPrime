@@ -25,6 +25,7 @@ opt_list <- list(
   make_option("--max_gap", type="integer", default=NA_integer_, help="Maximum allowed longest zero-coverage run within the final window"),
   make_option("--search_slop", type="integer", default=1000, help="Extra bases around exon span for coverage import"),
   make_option("--trim_to_exon", action="store_true", default=FALSE, help="Trim final window to boundaries of exon containing the peak (prevents intronic spill-over)"),
+  make_option("--trim_low_coverage_pct", type="double", default=NA_real_, help="After window selection, trim ends with coverage below X% of window peak (0-100, e.g. 10 for 10%)"),
   make_option("--min_exonic_fraction", type="double", default=NA_real_, help="If set and window exonic fraction < value, mark as failing (reported in QC); no automatic rescue unless --trim_to_exon used"),
   make_option("--out_fa", type="character", default="primer_targets.fa"),
   make_option("--out_bed", type="character", default="primer_targets.bed"),
@@ -311,6 +312,46 @@ longest_zero_run <- function(x) {
   max(zero_runs)
 }
 
+# Trim window ends with coverage below threshold percentage of window peak
+trim_low_coverage <- function(coverage_vec, threshold_pct) {
+  if (is.na(threshold_pct) || threshold_pct <= 0) {
+    return(list(start_trim = 0, end_trim = 0, trimmed_length = length(coverage_vec)))
+  }
+  
+  cov_nona <- replace(coverage_vec, is.na(coverage_vec), 0)
+  window_peak <- max(cov_nona)
+  threshold <- window_peak * (threshold_pct / 100)
+  
+  if (window_peak == 0) {
+    return(list(start_trim = 0, end_trim = 0, trimmed_length = length(coverage_vec)))
+  }
+  
+  # Find first position >= threshold from start
+  start_trim <- 0
+  for (i in seq_along(cov_nona)) {
+    if (cov_nona[i] >= threshold) break
+    start_trim <- start_trim + 1
+  }
+  
+  # Find first position >= threshold from end
+  end_trim <- 0
+  for (i in rev(seq_along(cov_nona))) {
+    if (cov_nona[i] >= threshold) break
+    end_trim <- end_trim + 1
+  }
+  
+  # Ensure we don't trim everything
+  trimmed_length <- length(cov_nona) - start_trim - end_trim
+  if (trimmed_length <= 0) {
+    # If trimming would remove everything, keep the original window
+    start_trim <- 0
+    end_trim <- 0
+    trimmed_length <- length(coverage_vec)
+  }
+  
+  list(start_trim = start_trim, end_trim = end_trim, trimmed_length = trimmed_length)
+}
+
 find_best_window <- function(chr, search_start, search_end, wsize, max_gap = NA_integer_) {
   if (!(chr %in% names(cov_cache))) return(NULL)
   cc <- cov_cache[[chr]]
@@ -426,6 +467,42 @@ for (gid in names(g)) {
       pass_max_gap <- if (is.na(opt$max_gap)) TRUE else (w_lzr <= opt$max_gap)
     } else {
       cat("    No better window found, keeping original\n")
+    }
+  }
+
+  # Apply coverage-based trimming if requested
+  original_start <- win_start
+  original_end <- win_end
+  trim_applied <- FALSE
+  if (!is.na(opt$trim_low_coverage_pct)) {
+    trim_result <- trim_low_coverage(wcov, opt$trim_low_coverage_pct)
+    if (trim_result$start_trim > 0 || trim_result$end_trim > 0) {
+      trim_applied <- TRUE
+      new_start <- win_start + trim_result$start_trim
+      new_end <- win_end - trim_result$end_trim
+      
+      cat("  Gene", gid, "coverage trimming (", opt$trim_low_coverage_pct, "% threshold):\n")
+      cat("    Original window:", win_start, "-", win_end, "(", win_end - win_start + 1, "bp)\n")
+      cat("    Trimmed window: ", new_start, "-", new_end, "(", new_end - new_start + 1, "bp)\n")
+      cat("    Trimmed:", trim_result$start_trim, "bp from start,", trim_result$end_trim, "bp from end\n")
+      
+      # Update window coordinates
+      win_start <- new_start
+      win_end <- new_end
+      peak_pos <- as.integer((win_start + win_end) / 2)  # Recenter peak
+      strategy <- paste0(strategy, "+trimmed")
+      
+      # Recalculate coverage statistics for trimmed window
+      wcov <- get_window_cov(chr_g, win_start, win_end)
+      wcov_nona <- replace(wcov, is.na(wcov), 0)
+      w_mean <- mean(wcov_nona)
+      w_median <- stats::median(wcov_nona)
+      w_min <- min(wcov_nona)
+      w_max <- max(wcov_nona)
+      w_zeros <- sum(wcov_nona == 0)
+      w_lzr <- longest_zero_run(wcov_nona)
+      pass_min_mean <- if (is.na(dynamic_min_mean)) TRUE else (w_mean >= dynamic_min_mean)
+      pass_max_gap <- if (is.na(opt$max_gap)) TRUE else (w_lzr <= opt$max_gap)
     }
   }
 
