@@ -49,7 +49,6 @@ __pycache__/
 slurm-*.out
 *.sbatch
 *.pbs
-RunJob.sh
 job_*.sh
 
 # Log files
