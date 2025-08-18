@@ -1,7 +1,7 @@
 #!/bin/bash
 #PBS -N PrimerDesign
-#PBS -l nodes=1:ppn=2
-#PBS -l walltime=02:00:00
+#PBS -l nodes=1:ppn=1
+#PBS -l walltime=04:00:00
 #PBS -l mem=32gb
 
 # setting up environment variables
@@ -14,15 +14,16 @@ export CONDA_PKGS_DIRS=/user/gent/446/vsc44685/ScratchVO_dir/conda_pkgs
 export NXF_CONDA_CACHEDIR=/user/gent/446/vsc44685/ScratchVO_dir/conda_cache
 
 #activate a conda enviroment
-conda activate /user/gent/446/vsc44685/DataVO_dir/miniconda2/envs/nf-core 
+#conda activate /user/gent/446/vsc44685/DataVO_dir/miniconda2/envs/nf-core 
+cd /user/gent/446/vsc44685/ScratchVO_dir/new_PrimerDesign
 #load nextflow
 ml Nextflow/25.04.4
 # 1) Launch with conda profile
-nextflow run main.nf -profile local \
+nextflow run main.nf -profile pbs \
   --bam ./testdata/Merged_S7_S12.bam \
   --fasta /data/gent/vo/000/gvo00027/resources/Ensembl_genomes/Homo_sapiens/GRCh38/Homo_sapiens.GRCh38.dna.primary_assembly.chrIS_spikes_45S.fa \
   --gtf /data/gent/vo/000/gvo00027/resources/Ensembl_transcriptomes/Homo_sapiens/GRCh38/Homo_sapiens.GRCh38.109.chrIS_spikes_45S.gtf \
-  --genes ./testdata/geneids.txt \
+  --genes ./testdata/Class1_filt.txt \
   --pad 100 \
   --smooth_k 31 \
   --sliding_window true \
@@ -34,4 +35,4 @@ nextflow run main.nf -profile local \
   --primer3_settings config/primer3_settings.txt \
   --transcriptome_index /data/gent/vo/000/gvo00027/resources/Bowtie2_index/Homo_sapiens/Transcriptome_Homo_sapiens.GRCh38.109.chrIS_spikes_45S/bowtie2_index \
   --transcriptome_fasta /data/gent/vo/000/gvo00027/resources/Ensembl_transcriptomes/Homo_sapiens/GRCh38/Homo_sapiens.GRCh38.109.chrIS_spikes_45S.fa \
-  --outdir results 
+  --outdir results

@@ -262,6 +262,27 @@ process ANALYZE_PRIMER_ALIGNMENTS {
   """
 }
 
+process SELECT_BEST_PRIMERS {
+  tag 'select_best_primers'
+  publishDir params.outdir, mode: 'copy'
+  conda "python=3.9 pandas=1.5.*"
+
+  input:
+  path report
+  path summary
+
+  output:
+  path 'best_primers.tsv'
+
+  script:
+  """
+  python ${projectDir}/bin/select_best_primer.py \
+    --report ${report} \
+    --summary ${summary} \
+    --out best_primers.tsv
+  """
+}
+
 workflow {
   // Validate required parameters
   if (!params.bam) error "Missing required parameter: --bam"
@@ -324,12 +345,14 @@ workflow {
     // Optional: Align primers to transcriptome for specificity check
     if (transcriptome_index_prefix != 'NO_INDEX') {
       alignment_results = ALIGN_PRIMERS_TRANSCRIPTOME(primers_fasta, transcriptome_index_prefix)
-      primer_alignment_report = ANALYZE_PRIMER_ALIGNMENTS(
+      ANALYZE_PRIMER_ALIGNMENTS(
         alignment_results[0], // BAM file
         alignment_results[1], // BAI file  
         cdna_primers,
         transcriptome_fasta_ch
       )
+      // Select best primers based on alignment summary
+      best_primers = SELECT_BEST_PRIMERS(ANALYZE_PRIMER_ALIGNMENTS.out[0], ANALYZE_PRIMER_ALIGNMENTS.out[1])
     }
 
   emit:
@@ -341,4 +364,5 @@ workflow {
     primer3_output
     cdna_primers
     primers_fasta
+  best_primers
 }
