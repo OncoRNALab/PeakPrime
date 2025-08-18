@@ -1,3 +1,7 @@
+// PeakPrime — RNA‑seq primer design pipeline
+// A Nextflow workflow that detects coverage peaks, selects target windows,
+// designs cDNA‑appropriate primers with Primer3, and optionally performs
+// transcriptome alignment QC.
 nextflow.enable.dsl=2
 
 params.bam                 = null        // input RNA‑seq BAM (spliced alignments)

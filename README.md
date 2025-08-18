@@ -1,16 +1,23 @@
-# RNA-seq Primer Design Pipeline
+# PeakPrime — RNA-seq primer design pipeline
 
-A Nextflow pipeline for designing primers from RNA-seq data using peak detection and Primer3.
+
+PeakPrime quickly finds peak-covered, exon-aware windows in RNA-seq data and designs strand-correct cDNA primers with robust QC.
+
+Why PeakPrime?
+
+- Peak-centered first: fast and biologically sensible default
+- Sliding-window rescue: can search for better windows when the peak window fails QC
+- Strand-aware primer selection for cDNA assays
+- Optional transcriptome alignment QC to detect cross-reactivity
 
 ## Features
 
-- **Coverage Analysis**: Extracts high-coverage regions from RNA-seq BAM files using BigWig conversion
-- **Advanced Quality Control**: Implements coverage trimming and sliding window analysis to ensure primer quality
-- **Strand-Specific Primer Selection**: Correctly extracts biologically appropriate primers for cDNA amplification
-- **Peak Detection**: Identifies optimal primer target regions with customizable parameters
-- **Primer Design**: Uses Primer3 for robust primer pair generation
-- **Transcriptome Alignment QC**: Quality control through transcriptome alignment analysis with forward-strand filtering
-- **Performance Optimized**: Fast Python-based alignment analysis replacing slower R implementation
+- **Coverage analysis**: Extracts high-coverage regions from RNA-seq BAM files using BigWig conversion
+- **Advanced QC**: Coverage trimming, gap detection, sliding-window optimization
+- **Strand-specific primer selection**: Ensures primers match mRNA orientation for cDNA amplification
+- **Peak detection**: Identifies optimal target regions with configurable parameters
+- **Primer design**: Uses Primer3 for robust primer pair generation
+- **Transcriptome alignment QC**: Bowtie2-based specificity checks and Python analysis
 
 ## Requirements
 
@@ -24,17 +31,6 @@ A Nextflow pipeline for designing primers from RNA-seq data using peak detection
   - Optional: Pre-built Bowtie2 transcriptome index
 
 ## Quick Start
-
-### Basic Usage
-
-```bash
-nextflow run main.nf \
-  --bam sample.bam \
-  --gtf annotations.gtf \
-  --genes gene_list.txt \
-  --primer3_settings primer3_settings.txt \
-  --outdir results/
-```
 
 ## Example Usage
 
