@@ -117,33 +117,19 @@ tryCatch({
     chr_regions <- ex_clean[seqnames(ex_clean) == chr_name]
     
     if (length(chr_regions) > 0) {
-      cat("  Processing", length(chr_regions), "regions individually to conserve memory\n")
+      # Create a range spanning all regions on this chromosome (with some padding)
+      chr_start <- min(start(chr_regions)) - 1000
+      chr_end <- max(end(chr_regions)) + 1000
+      chr_start <- max(1, chr_start)  # Don't go below 1
       
-      # Process each region individually instead of loading entire chromosome
-      chr_coverage_list <- list()
-      total_intervals <- 0
+      cat("  Querying chr", chr_name, "from", chr_start, "to", chr_end, "\n")
       
-      for (i in seq_along(chr_regions)) {
-        region <- chr_regions[i]
-        # Add padding around each individual region
-        reg_start <- max(1, start(region) - opt$search_slop)
-        reg_end <- end(region) + opt$search_slop
-        
-        query_range <- GRanges(seqnames = chr_name, 
-                             ranges = IRanges(start = reg_start, end = reg_end))
-        
-        region_coverage <- import(opt$bw, which = query_range)
-        chr_coverage_list[[i]] <- region_coverage
-        total_intervals <- total_intervals + length(region_coverage)
-        
-        if (i %% 10 == 0) {
-          cat("    Processed", i, "of", length(chr_regions), "regions\n")
-        }
-      }
+      # Import coverage for this region
+      query_range <- GRanges(seqnames = chr_name, 
+                           ranges = IRanges(start = chr_start, end = chr_end))
       
-      # Combine all coverage intervals for this chromosome
-      chr_coverage <- do.call(c, chr_coverage_list)
-      cat("  Found", total_intervals, "total coverage intervals across all regions\n")
+      chr_coverage <- import(opt$bw, which = query_range)
+      cat("  Found", length(chr_coverage), "coverage intervals in BigWig\n")
       
       # Debug: show some example coverage intervals
       if (length(chr_coverage) > 0) {
@@ -151,77 +137,89 @@ tryCatch({
         for (k in 1:min(3, length(chr_coverage))) {
           cat("    ", start(chr_coverage[k]), "-", end(chr_coverage[k]), " score:", chr_coverage[k]$score, "\n")
         }
-        
-        # Report memory usage
-        mem_usage <- as.numeric(object.size(chr_coverage)) / 1024^2
-        cat("  Chromosome coverage data size:", round(mem_usage, 2), "MB\n")
-        
       } else {
-        cat("  WARNING: No coverage intervals found in BigWig for these regions!\n")
+        cat("  WARNING: No coverage intervals found in BigWig for this region!\n")
+        # Try querying a larger region to see if there's any data
+        larger_range <- GRanges(seqnames = chr_name, 
+                               ranges = IRanges(start = 1, end = 1000000))
+        test_cov <- import(opt$bw, which = larger_range)
+        cat("  Testing larger region (1-1M): found", length(test_cov), "intervals\n")
       }
       
-      # Convert to Rle for easier processing - now process each region individually
+  # Convert to Rle for easier processing
       if (length(chr_coverage) > 0) {
-                # Process each region individually to extract coverage
-        for (i in seq_along(chr_regions)) {
-          region <- chr_regions[i]
-          reg_start <- max(1, start(region) - opt$search_slop)
-          reg_end <- end(region) + opt$search_slop
+        # Create an RLE manually from the BigWig intervals
+        # Initialize with zeros
+        chr_rle <- Rle(0, chr_end - chr_start + 1)
+        
+        # Fill in the coverage values from BigWig intervals
+        for (j in seq_along(chr_coverage)) {
+          interval <- chr_coverage[j]
+          # Convert genomic coordinates to RLE coordinates
+          rle_start <- start(interval) - chr_start + 1
+          rle_end <- end(interval) - chr_start + 1
           
-          # Get coverage for this specific region
-          region_coverage <- chr_coverage_list[[i]]
+          # Ensure we're within bounds
+          rle_start <- max(1, rle_start)
+          rle_end <- min(length(chr_rle), rle_end)
           
-          if (length(region_coverage) > 0) {
-            # Create RLE for this region only
-            region_length <- reg_end - reg_start + 1
-            region_rle <- Rle(0, region_length)
-            
-            # Fill in coverage values
-            for (j in seq_along(region_coverage)) {
-              interval <- region_coverage[j]
-              # Convert to region-relative coordinates
-              rle_start <- start(interval) - reg_start + 1
-              rle_end <- end(interval) - reg_start + 1
-              
-              # Ensure bounds
-              rle_start <- max(1, rle_start)
-              rle_end <- min(region_length, rle_end)
-              
-              if (rle_start <= rle_end && rle_start <= region_length) {
-                region_rle[rle_start:rle_end] <- interval$score
-              }
-            }
-          } else {
-            # No coverage data for this region
-            region_length <- reg_end - reg_start + 1
-            region_rle <- Rle(0, region_length)
+          if (rle_start <= rle_end && rle_start <= length(chr_rle)) {
+            # Set the coverage values
+            chr_rle[rle_start:rle_end] <- interval$score
           }
+        }
+      } else {
+        # Create empty coverage if no data
+        chr_rle <- Rle(0, chr_end - chr_start + 1)
+      }
+      
+  cat("  Coverage RLE length:", length(chr_rle), "values\n")
+      cat("  Coverage RLE summary: min =", min(chr_rle), "max =", max(chr_rle), "mean =", mean(chr_rle), "\n")
+  # Save cache for this chromosome
+  cov_cache[[chr_name]] <- list(rle = chr_rle, offset = chr_start)
+      
+      # Extract coverage for each region on this chromosome
+      for (i in which(seqnames(ex_clean) == chr_name)) {
+        region <- ex_clean[i]
+        region_start <- start(region) - chr_start + 1
+        region_end <- end(region) - chr_start + 1
+        
+        cat("  Region", i, ":", as.character(seqnames(region)), ":", start(region), "-", end(region), 
+            "(RLE coords:", region_start, "-", region_end, ")\n")
+        
+        # Ensure we don't go out of bounds
+        if (region_start > 0 && region_start <= length(chr_rle)) {
+          region_end <- min(region_end, length(chr_rle))
+          region_start <- max(1, region_start)
           
-          # Store coverage for this region
-          region_key <- paste0(chr_name, ":", reg_start, "-", reg_end)
-          reg_cov[[region_key]] <- list(
-            region = region,
-            rle = region_rle,
-            offset = reg_start
-          )
+          if (region_start <= region_end) {
+            cov_values <- as.numeric(chr_rle[region_start:region_end])
+            cat("    Extracted", length(cov_values), "coverage values, max =", max(cov_values), "\n")
+          } else {
+            cov_values <- numeric(width(region))
+            cat("    Invalid region coordinates, using zeros\n")
+          }
+        } else {
+          cov_values <- numeric(width(region))
+          cat("    Region out of bounds, using zeros\n")
         }
         
-        # Clean up memory
-        rm(chr_coverage_list, chr_coverage)
-        gc()
+        # Ensure the coverage vector has the right length
+        if (length(cov_values) < width(region)) {
+          cov_values <- c(cov_values, rep(0, width(region) - length(cov_values)))
+        } else if (length(cov_values) > width(region)) {
+          cov_values <- cov_values[1:width(region)]
+        }
         
-      } else {
-        cat("  No regions found for chromosome", chr_name, "\n")
+        reg_cov[[i]] <- list(value = cov_values)
       }
+      
+      cat("Successfully processed", sum(seqnames(ex_clean) == chr_name), "regions on chromosome", chr_name, "\n")
     }
-    
-    # Report overall progress
-    cat("Processed", length(target_chroms_filtered), "chromosomes, collected coverage for", length(reg_cov), "regions\n")
-    cat("Memory usage after coverage extraction:", round(as.numeric(object.size(reg_cov)) / 1024^2, 2), "MB\n")
+  }
   
-  cat("Successfully got coverage for", length(reg_cov), "regions using memory-efficient approach\n")
-
-}
+  cat("Successfully got coverage for", length(reg_cov), "regions using simple approach\n")
+  
 }, error = function(e) {
   cat("Error with rtracklayer approach:", e$message, "\n")
   
@@ -267,21 +265,13 @@ tryCatch({
   })
 })
 
-# Create region2gene mapping and align with reg_cov data structure
+# Create region2gene mapping for the clean regions
 region2gene <- character()
-region_keys <- names(reg_cov)
 clean_names <- names(ex_clean)
-
-# Create mapping from region indices to gene IDs  
-for (i in seq_along(clean_names)) {
-  name <- clean_names[i]
+for (name in clean_names) {
   gene_id <- strsplit(name, "\\.")[[1]][1]
   region2gene <- c(region2gene, gene_id)
 }
-
-# Also create a mapping from region keys to their corresponding coverage data
-# Since reg_cov now uses chr:start-end format, we need to extract coverage properly
-cat("Processing", length(region_keys), "coverage regions for gene assignment\n")
 
 # Iterate genes
 peak_rows <- list()
@@ -290,52 +280,25 @@ genes_processed <- 0
 genes_with_coverage <- 0
 
 cat("Processing", length(names(g)), "genes for peak detection\n")
-cat("Initial memory usage:", round(as.numeric(object.size(list(reg_cov, g, ex_clean))) / 1024^2, 2), "MB\n")
 
 get_window_cov <- function(chr, start_pos, end_pos) {
-  # Look directly in reg_cov for coverage data that overlaps with requested coordinates
-  target_region <- NULL
-  
-  for (region_key in names(reg_cov)) {
-    cov_data <- reg_cov[[region_key]]
-    region_chr <- as.character(seqnames(cov_data$region))
-    region_start <- start(cov_data$region)
-    region_end <- end(cov_data$region)
-    
-    # Check if this region matches the chromosome and overlaps with requested coordinates
-    if (region_chr == chr && start_pos <= region_end && end_pos >= region_start) {
-      target_region <- cov_data
-      break
-    }
-  }
-  
-  if (is.null(target_region)) {
+  if (!(chr %in% names(cov_cache))) return(rep(NA_real_, end_pos - start_pos + 1))
+  cc <- cov_cache[[chr]]
+  start_idx <- start_pos - cc$offset + 1
+  end_idx <- end_pos - cc$offset + 1
+  if (is.na(start_idx) || is.na(end_idx) || end_idx < 1 || start_idx > length(cc$rle)) {
     return(rep(NA_real_, end_pos - start_pos + 1))
   }
-  
-  # Calculate indices within the RLE
-  start_idx <- start_pos - target_region$offset + 1
-  end_idx <- end_pos - target_region$offset + 1
-  
-  if (is.na(start_idx) || is.na(end_idx) || end_idx < 1 || start_idx > length(target_region$rle)) {
-    return(rep(NA_real_, end_pos - start_pos + 1))
-  }
-  
   start_idx <- max(1, start_idx)
-  end_idx <- min(length(target_region$rle), end_idx)
-  vec <- as.numeric(target_region$rle[start_idx:end_idx])
-  
-  # Handle padding if needed
-  left_pad <- (start_pos - target_region$offset + 1) - start_idx
-  right_pad <- (end_pos - target_region$offset + 1) - end_idx
+  end_idx <- min(length(cc$rle), end_idx)
+  vec <- as.numeric(cc$rle[start_idx:end_idx])
+  left_pad <- (start_pos - cc$offset + 1) - start_idx
+  right_pad <- (end_pos - cc$offset + 1) - end_idx
   if (left_pad > 0) vec <- c(rep(NA_real_, left_pad), vec)
   if (right_pad > 0) vec <- c(vec, rep(NA_real_, right_pad))
-  
-  # Ensure correct length
   need <- end_pos - start_pos + 1
   if (length(vec) < need) vec <- c(vec, rep(NA_real_, need - length(vec)))
   if (length(vec) > need) vec <- vec[seq_len(need)]
-  
   vec
 }
 
@@ -427,61 +390,9 @@ for (gid in names(g)) {
   }
   
   genes_processed <- genes_processed + 1
-    genes_processed <- genes_processed + 1
-    cat("Processing gene:", gid, "\n")
+
   blocks <- ex_merged[[gid]]
-  
-  # Extract coverage data for this gene's regions
-  gene_regions <- ex_clean[region2gene == gid]
-  gene_coverage_list <- list()
-  
-  for (i in seq_along(gene_regions)) {
-    region <- gene_regions[i]
-    chr_name <- as.character(seqnames(region))
-    
-    # Find matching coverage data in reg_cov
-    # Look for regions that overlap with this gene region
-    matching_key <- NULL
-    for (key in names(reg_cov)) {
-      cov_data <- reg_cov[[key]]
-      if (overlapsAny(region, cov_data$region)) {
-        matching_key <- key
-        break
-      }
-    }
-    
-    if (!is.null(matching_key)) {
-      cov_data <- reg_cov[[matching_key]]
-      # Extract coverage for this specific region within the larger coverage region
-      region_start <- start(region)
-      region_end <- end(region)
-      cov_start <- start(cov_data$region)
-      cov_end <- end(cov_data$region)
-      
-      # Calculate offset within the coverage RLE
-      rle_start <- max(1, region_start - cov_data$offset + 1)
-      rle_end <- min(length(cov_data$rle), region_end - cov_data$offset + 1)
-      
-      if (rle_start <= rle_end && rle_start <= length(cov_data$rle)) {
-        region_cov <- as.numeric(cov_data$rle[rle_start:rle_end])
-        # Ensure correct length
-        expected_length <- width(region)
-        if (length(region_cov) < expected_length) {
-          region_cov <- c(region_cov, rep(0, expected_length - length(region_cov)))
-        } else if (length(region_cov) > expected_length) {
-          region_cov <- region_cov[1:expected_length]
-        }
-        gene_coverage_list[[i]] <- region_cov
-      } else {
-        gene_coverage_list[[i]] <- rep(0, width(region))
-      }
-    } else {
-      # No coverage data found for this region
-      gene_coverage_list[[i]] <- rep(0, width(region))
-    }
-  }
-  
-  cov_vec <- unlist(gene_coverage_list, use.names = FALSE)
+  cov_vec <- unlist(lapply(reg_cov[idx], function(rr) rr$value), use.names = FALSE)
   
   cat("Gene", gid, "- regions:", length(idx), "coverage length:", length(cov_vec), "max coverage:", max(cov_vec, na.rm = TRUE), "\n")
   
@@ -687,15 +598,7 @@ for (i in seq_along(gr_peaks)) {
       }
     }
   }
-  
-  # Clean up memory after processing this gene
-  # rm(gene_coverage_list, cov_vec) # Not needed here, already done in gene loop
 }
-
-cat("Completed processing", genes_processed, "genes,", genes_with_coverage, "with coverage data\n")
-cat("Final memory usage:", round(as.numeric(object.size(list(peaks_df, qc_df))) / 1024^2, 2), "MB\n")
-cat("Script completed\n")
-gc()
 
 peaks_df$exonic_fraction <- exonic_fraction
 peaks_df$trimmed_to_exon <- trimmed
@@ -708,45 +611,26 @@ qc_df$trimmed_to_exon <- trimmed[match(qc_df$gene, peaks_df$gene)]
 
 # Extract sequences
 # Choose sequence source: FASTA (preferred if provided) or BSgenome
-seqs <- NULL
 if (!is.null(opt$fasta)) {
-  cat("Trying to extract sequences from FASTA file:", opt$fasta, "\n")
-  tryCatch({
-    faf <- Rsamtools::FaFile(opt$fasta)
-    Rsamtools::open.FaFile(faf)
-    on.exit(Rsamtools::close.FaFile(faf), add = TRUE)
-    seqs <- Rsamtools::getSeq(faf, gr_peaks)   # names taken from GRanges
-    cat("Successfully extracted sequences from FASTA.\n")
-  }, error = function(e) {
-    cat("Error extracting sequences from FASTA:", e$message, "\n")
-  })
+  faf <- Rsamtools::FaFile(opt$fasta)
+  Rsamtools::open.FaFile(faf)
+  on.exit(Rsamtools::close.FaFile(faf), add = TRUE)
+  seqs <- Rsamtools::getSeq(faf, gr_peaks)   # names taken from GRanges
 } else {
-  cat("Trying to extract sequences from BSgenome package:", opt$genome, "\n")
+  # Try to get BSgenome object
   tryCatch({
     bs <- get(opt$genome)                      # BSgenome fallback
     seqs <- Biostrings::getSeq(bs, gr_peaks)
-    cat("Successfully extracted sequences from BSgenome.\n")
   }, error = function(e) {
-    cat("Error extracting sequences from BSgenome:", e$message, "\n")
+    stop("No FASTA file provided and BSgenome package '", opt$genome, "' is not available. Please provide a FASTA file with --fasta or install the correct BSgenome package.")
   })
-}
-
-if (is.null(seqs)) {
-  stop("Failed to extract template sequences. Check FASTA path, BSgenome package, and gr_peaks coordinates.")
 }
 
 nm <- paste0(peaks_df$gene, "|", as.character(seqnames(gr_peaks)), ":",
              start(gr_peaks), "-", end(gr_peaks), "(", peaks_df$strand, ")")
 names(seqs) <- nm
 
-# Append universal sequence to 3' end of each template
-universal_seq <- "GTAAAACGACGGCCAG"
-seqs_appended <- subseq(seqs, start=1, end=width(seqs))
-seqs_appended <- paste0(as.character(seqs_appended), universal_seq)
-seqs_appended <- DNAStringSet(seqs_appended)
-names(seqs_appended) <- nm
-
-writeXStringSet(seqs_appended, filepath = opt$out_fa)
+writeXStringSet(seqs, filepath = opt$out_fa)
 export(gr_peaks, con = opt$out_bed, format = "BED")
 
 peaks_out <- data.frame(

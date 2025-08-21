@@ -12,7 +12,7 @@ Why PeakPrime?
 
 ## Features
 
-- **Coverage analysis**: Extracts high-coverage regions from RNA-seq BAM files using BigWig conversion
+- **Isoform‑agnostic Coverage analysis**: Extracts high-coverage regions from RNA-seq BAM files using BigWig conversion
 - **Advanced QC**: Coverage trimming, gap detection, sliding-window optimization
 - **Strand-specific primer selection**: Ensures primers match mRNA orientation for cDNA amplification
 - **Peak detection**: Identifies optimal target regions with configurable parameters

@@ -102,7 +102,7 @@ process PICK_PEAKS {
   def trim_cov_arg = params.trim_low_coverage_pct != null ? "--trim_low_coverage_pct ${params.trim_low_coverage_pct}" : ""
   def min_exonic_arg = params.min_exonic_fraction != null ? "--min_exonic_fraction ${params.min_exonic_fraction}" : ""
   """
-  Rscript ${projectDir}/bin/pick_peaks.R \
+  Rscript ${projectDir}/bin/pick_peaks_span.R \
     --bw ${bw} \
     --gtf ${gtf} \
     --genes ${genes} \

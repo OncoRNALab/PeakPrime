@@ -15,15 +15,15 @@ export NXF_CONDA_CACHEDIR=/user/gent/446/vsc44685/ScratchVO_dir/conda_cache
 
 #activate a conda enviroment
 #conda activate /user/gent/446/vsc44685/DataVO_dir/miniconda2/envs/nf-core 
-cd /user/gent/446/vsc44685/ScratchVO_dir/new_PrimerDesign
+cd /user/gent/446/vsc44685/ScratchVO_dir/OncoRNA_peakprime/Primer_PeakFindR
 #load nextflow
 ml Nextflow/25.04.4
 # 1) Launch with conda profile
-nextflow run main.nf -profile pbs \
+nextflow run main.nf -profile local \
   --bam ./testdata/Merged_S7_S12.bam \
   --fasta /data/gent/vo/000/gvo00027/resources/Ensembl_genomes/Homo_sapiens/GRCh38/Homo_sapiens.GRCh38.dna.primary_assembly.chrIS_spikes_45S.fa \
   --gtf /data/gent/vo/000/gvo00027/resources/Ensembl_transcriptomes/Homo_sapiens/GRCh38/Homo_sapiens.GRCh38.109.chrIS_spikes_45S.gtf \
-  --genes ./testdata/Class1_filt.txt \
+  --genes ./testdata/geneids.txt \
   --pad 100 \
   --smooth_k 31 \
   --sliding_window true \
