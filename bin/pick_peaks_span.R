@@ -180,7 +180,9 @@ for (gid in names(g)) {
   }
 
   # Exonic fraction calculation
-  window_gr <- GRanges(seqnames=gene_chr, ranges=IRanges(win_start, win_end))
+  window_gr <- GRanges(seqnames=gene_chr, ranges=IRanges(win_start, win_end), strand=strand(g[gid]))
+  cat("  Window GRanges: chr=", as.character(seqnames(window_gr)), " start=", start(window_gr), " end=", end(window_gr), " strand=", as.character(strand(window_gr)), "\n")
+  cat("  Exonic blocks: chr=", as.character(seqnames(blocks)), " start=", start(blocks), " end=", end(blocks), " strand=", as.character(strand(blocks)), "\n")
   hits <- findOverlaps(window_gr, blocks)
   exonic_bases <- 0
   if (length(hits) > 0) {
@@ -188,6 +190,7 @@ for (gid in names(g)) {
     ov <- intersect(window_gr, overlapping_blocks)
     exonic_bases <- sum(width(ov))
   }
+  cat("  Exonic bases found:", exonic_bases, " out of window width ", width(window_gr), "\n")
   exonic_fraction <- exonic_bases / width(window_gr)
   fail_exonic_fraction <- !is.na(opt$min_exonic_fraction) && exonic_fraction < opt$min_exonic_fraction
 
@@ -214,7 +217,7 @@ for (gid in names(g)) {
     }
   }
 
-  # Output rows
+  # Output rows (without exonic_fraction, trimmed_to_exon, fail_exonic_fraction)
   peak_rows[[gid]] <- data.frame(
     gene = gid,
     chr = gene_chr,
@@ -222,9 +225,6 @@ for (gid in names(g)) {
     start = start(window_gr),
     end = end(window_gr),
     strand = as.character(strand(g[gid])),
-    exonic_fraction = exonic_fraction,
-    trimmed_to_exon = trimmed_to_exon,
-    fail_exonic_fraction = fail_exonic_fraction,
     strategy = strategy,
     stringsAsFactors = FALSE
   )
@@ -236,18 +236,66 @@ for (gid in names(g)) {
     longest_zero_run = w_lzr,
     pass_min_mean = pass_min_mean,
     pass_max_gap = pass_max_gap,
-    exonic_fraction = exonic_fraction,
-    trimmed_to_exon = trimmed_to_exon,
-    fail_exonic_fraction = fail_exonic_fraction,
     strategy = strategy,
     stringsAsFactors = FALSE
   )
 }
 
 
-# Write outputs
+
+# After all genes processed, recalculate exonic_fraction, trimmed_to_exon, fail_exonic_fraction for all windows
 peaks_df <- do.call(rbind, peak_rows)
 qc_df <- do.call(rbind, qc_rows)
+gr_peaks <- GRanges(peaks_df$chr, IRanges(peaks_df$start, peaks_df$end), strand = peaks_df$strand, gene = peaks_df$gene)
+exonic_fraction <- rep(NA_real_, length(gr_peaks))
+trimmed <- rep(FALSE, length(gr_peaks))
+fail_exonic_fraction <- rep(FALSE, length(gr_peaks))
+for (i in seq_along(gr_peaks)) {
+  gid <- peaks_df$gene[i]
+  blocks <- ex_merged[[gid]]
+  w <- gr_peaks[i]
+  hits <- findOverlaps(w, blocks)
+  if (length(hits) > 0) {
+    overlapping_blocks <- blocks[subjectHits(hits)]
+    ov <- intersect(w, overlapping_blocks)
+    exonic_bases <- sum(width(ov))
+    exonic_fraction[i] <- exonic_bases / width(w)
+  } else {
+    exonic_fraction[i] <- 0
+  }
+  if (!is.na(opt$min_exonic_fraction) && exonic_fraction[i] < opt$min_exonic_fraction) {
+    fail_exonic_fraction[i] <- TRUE
+  }
+  if (opt$trim_to_exon) {
+    peak_pos <- peaks_df$pos[i]
+    containing <- blocks[peak_pos >= start(blocks) & peak_pos <= end(blocks)]
+    if (length(containing) >= 1) {
+      exon_range <- containing[1]
+      current_start <- start(gr_peaks[i])
+      current_end <- end(gr_peaks[i])
+      new_start <- max(current_start, start(exon_range))
+      new_end <- min(current_end, end(exon_range))
+      gr_peaks[i] <- GRanges(seqnames(exon_range), IRanges(new_start, new_end), strand = strand(exon_range), gene = gid)
+      trimmed[i] <- TRUE
+      w_new <- gr_peaks[i]
+      hits_new <- findOverlaps(w_new, blocks)
+      if (length(hits_new) > 0) {
+        overlapping_blocks_new <- blocks[subjectHits(hits_new)]
+        ov_new <- intersect(w_new, overlapping_blocks_new)
+        exonic_bases_new <- sum(width(ov_new))
+        exonic_fraction[i] <- exonic_bases_new / width(w_new)
+      } else {
+        exonic_fraction[i] <- 0
+      }
+    }
+  }
+}
+peaks_df$exonic_fraction <- exonic_fraction
+peaks_df$trimmed_to_exon <- trimmed
+peaks_df$fail_exonic_fraction <- fail_exonic_fraction
+qc_df$exonic_fraction <- exonic_fraction[match(qc_df$gene, peaks_df$gene)]
+qc_df$fail_exonic_fraction <- fail_exonic_fraction[match(qc_df$gene, peaks_df$gene)]
+qc_df$trimmed_to_exon <- trimmed[match(qc_df$gene, peaks_df$gene)]
 write.table(peaks_df, file = opt$out_peaks, sep = "\t", quote = FALSE, row.names = FALSE)
 write.table(qc_df, file = opt$out_qc, sep = "\t", quote = FALSE, row.names = FALSE)
 

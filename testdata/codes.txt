@@ -1,0 +1,3 @@
+samtools view -h -F 2308 /user/gent/446/vsc44685/ScratchVO_dir/OncoRNA_peakprime/Primer_PeakFindR/testdata/Merged_S7_S12.bam \
+| awk 'BEGIN{OFS="\t"} /^@/ || $0 ~ /\tNH:i:1(\t|$)/' \
+| samtools view -@8 -b -o /user/gent/446/vsc44685/ScratchVO_dir/OncoRNA_peakprime/Primer_PeakFindR/testdata/Merged_S7_S12.unique.bam -

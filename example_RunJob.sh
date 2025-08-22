@@ -1,7 +1,7 @@
 #!/bin/bash
 #PBS -N PrimerDesign
 #PBS -l nodes=1:ppn=1
-#PBS -l walltime=04:00:00
+#PBS -l walltime=01:00:00
 #PBS -l mem=32gb
 
 # setting up environment variables
@@ -23,7 +23,7 @@ nextflow run main.nf -profile local \
   --bam ./testdata/Merged_S7_S12.bam \
   --fasta /data/gent/vo/000/gvo00027/resources/Ensembl_genomes/Homo_sapiens/GRCh38/Homo_sapiens.GRCh38.dna.primary_assembly.chrIS_spikes_45S.fa \
   --gtf /data/gent/vo/000/gvo00027/resources/Ensembl_transcriptomes/Homo_sapiens/GRCh38/Homo_sapiens.GRCh38.109.chrIS_spikes_45S.gtf \
-  --genes ./testdata/geneids.txt \
+  --genes ./testdata/high.txt \
   --pad 100 \
   --smooth_k 31 \
   --sliding_window true \
@@ -35,4 +35,4 @@ nextflow run main.nf -profile local \
   --primer3_settings config/primer3_settings.txt \
   --transcriptome_index /data/gent/vo/000/gvo00027/resources/Bowtie2_index/Homo_sapiens/Transcriptome_Homo_sapiens.GRCh38.109.chrIS_spikes_45S/bowtie2_index \
   --transcriptome_fasta /data/gent/vo/000/gvo00027/resources/Ensembl_transcriptomes/Homo_sapiens/GRCh38/Homo_sapiens.GRCh38.109.chrIS_spikes_45S.fa \
-  --outdir results
+  --outdir results/high
