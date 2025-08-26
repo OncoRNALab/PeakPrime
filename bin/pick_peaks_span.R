@@ -316,7 +316,7 @@ if (!is.null(fasta_path)) {
 }
 
 # Append universal sequence to 3' end
-universal_seq <- "GTAAAACGACGGCCAG"
+universal_seq <- ""
 if (!is.null(seqs)) {
   seqs_appended <- paste0(as.character(seqs), universal_seq)
   seqs_appended <- DNAStringSet(seqs_appended)

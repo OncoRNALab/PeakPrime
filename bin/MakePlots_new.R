@@ -186,7 +186,7 @@ plot_gene_with_window <- function(
   }
 
   # ---------- plots ----------
-  cov_title <- sprintf("%s  %s:%d-%d (%s)", gene_id, gene_chr, gene_start, gene_end, gene_strand)
+  cov_title <- sprintf("%s  %s:%d-%d (%s)", gene_id, gene_chr, window_start, window_end, gene_strand)
   win_highlight <- data.frame(xmin = window_start, xmax = window_end,
                               ymin = 0.5, ymax = primer_lane + 0.5)
 
@@ -194,23 +194,21 @@ plot_gene_with_window <- function(
   p_cov <- ggplot()
   if (nrow(cov_df)) {
     if (yaxis_mode == "percent") {
+      # Use bin midpoints for area plot
+      cov_df_area <- cov_df[, .(pos = round((start + end)/2), score_pct = score_pct)]
       p_cov <- p_cov +
-        geom_rect(data = cov_df,
-                  aes(xmin = start, xmax = end, ymin = 0, ymax = score_pct),
-                  alpha = 0.5) +
+        geom_area(data = cov_df_area, aes(x = pos, y = score_pct), fill = "steelblue", alpha = 0.5) +
         scale_y_continuous(labels = function(x) sprintf("%d%%", round(x)),
                            limits = c(0, 100), name = "Coverage (% of peak)")
     } else if (yaxis_mode == "depth") {
+      cov_df_area <- cov_df[, .(pos = round((start + end)/2), score = score)]
       p_cov <- p_cov +
-        geom_rect(data = cov_df,
-                  aes(xmin = start, xmax = end, ymin = 0, ymax = score),
-                  alpha = 0.5) +
+        geom_area(data = cov_df_area, aes(x = pos, y = score), fill = "steelblue", alpha = 0.5) +
         labs(y = "Coverage (depth)")
     } else if (yaxis_mode == "log10") {
+      cov_df_area <- cov_df[, .(pos = round((start + end)/2), score = score)]
       p_cov <- p_cov +
-        geom_rect(data = cov_df,
-                  aes(xmin = start, xmax = end, ymin = 0, ymax = score),
-                  alpha = 0.5) +
+        geom_area(data = cov_df_area, aes(x = pos, y = score), fill = "steelblue", alpha = 0.5) +
         scale_y_continuous(trans = "log10", name = "Coverage (log10 depth)")
     }
   } else {

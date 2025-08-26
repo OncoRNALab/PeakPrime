@@ -54,26 +54,24 @@ def main():
             print(f'Wrote {args.out} (fallback quick filter)')
             return
 
-    # Keep only MAPQ==255 alignments
+    # Filter for perfect matches and high mapping quality first
     summary['alignment_mapq'] = pd.to_numeric(summary.get('alignment_mapq', 0), errors='coerce').fillna(0).astype(int)
     summary['mismatches'] = pd.to_numeric(summary.get('mismatches', 9999), errors='coerce').fillna(9999).astype(int)
-    hq = summary[summary['alignment_mapq'] == 255].copy()
+    filtered = summary[(summary['alignment_mapq'] == 255) & (summary['mismatches'] == 0)].copy()
 
     selected = []
-    for pid, group in hq.groupby('primer_id'):
+    for pid, group in filtered.groupby('primer_id'):
         genes = group['aligned_gene_name'].dropna().unique()
-        # require unique gene and all mismatches == 0
-        if len(genes) == 1 and (group['mismatches'] == 0).all():
-            # find report row for this primer
+        # require unique gene
+        if len(genes) == 1:
             rpt = report[report['primer_id'] == pid]
             if not rpt.empty:
                 row = rpt.iloc[0].to_dict()
-                # Remove alignment_quality from final output - keep only numerical metrics
                 if 'alignment_quality' in row:
                     del row['alignment_quality']
                 row['aligned_gene_name'] = genes[0]
                 row['hq_alignments'] = len(group)
-                row['zero_mismatch_alignments'] = len(group[group['mismatches'] == 0])
+                row['zero_mismatch_alignments'] = len(group)
                 selected.append(row)
 
     if not selected:

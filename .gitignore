@@ -51,7 +51,7 @@ __pycache__/
 slurm-*.out
 *.sbatch
 *.pbs
-job_*.sh
+job*.sh
 
 # Log files
 *.log

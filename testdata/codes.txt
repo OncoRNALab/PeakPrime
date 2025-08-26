@@ -36,14 +36,61 @@ Rscript ./bin/MakePlots_new.R \
 chmod +x ./bin/MakePlots.R
 
 Rscript ./bin/MakePlots_new.R \
-  --gene ENSG00000197170 \
-  --bw ./results/Class3/Merged_S7_S12.bw \
+  --gene ENSG00000034510 \
+  --bw ./results/Class1_test/Merged_S7_S12.bw \
   --gtf /data/gent/vo/000/gvo00027/resources/Ensembl_transcriptomes/Homo_sapiens/GRCh38/Homo_sapiens.GRCh38.109.chrIS_spikes_45S.gtf \
-  --peaks ./results/Class3/peaks.tsv \
-  --qc ./results/Class3/qc_coverage_summary.tsv \
-  --primer ./results/Class3/primer_targets.bed \
+  --peaks ./results/Class1_test/peaks.tsv \
+  --qc ./results/Class1_test/qc_coverage_summary.tsv \
+  --primer ./results/Class1_test/primer_targets.bed \
+  --yaxis percent \
+  --out ENSG00000034510_prct_class1.png
+
+
+  Rscript ./bin/MakePlots_new.R \
+  --gene ENSG00000034510 \
+  --bw ./results/Class1_WM30/Merged_S7_S12.bw \
+  --gtf /data/gent/vo/000/gvo00027/resources/Ensembl_transcriptomes/Homo_sapiens/GRCh38/Homo_sapiens.GRCh38.109.chrIS_spikes_45S.gtf \
+  --peaks ./results/Class1_WM30/peaks.tsv \
+  --qc ./results/Class1_WM30/qc_coverage_summary.tsv \
+  --primer ./results/Class1_WM30/primer_targets.bed \
   --yaxis depth \
-  --out ENSG00000197170_class3.png
+  --out ENSG00000034510_depth_class1WM30.png
+
+Rscript ./bin/MakePlots_new.R \
+  --gene ENSG00000089009 \
+  --bw ./results/Class1_W30_pad100_uniqBAM/Merged_S7_S12.unique.bw \
+  --gtf /data/gent/vo/000/gvo00027/resources/Ensembl_transcriptomes/Homo_sapiens/GRCh38/Homo_sapiens.GRCh38.109.chrIS_spikes_45S.gtf \
+  --peaks ./results/Class1_W30_pad100_uniqBAM/peaks.tsv \
+  --qc ./results/Class1_W30_pad100_uniqBAM/qc_coverage_summary.tsv \
+  --primer ./results/Class1_W30_pad100_uniqBAM/primer_targets.bed \
+  --yaxis percent \
+  --out ENSG00000089009_prct_Class1.png
+
+Rscript ./bin/MakePlots_new.R \
+  --gene ENSG00000125835 \
+  --bw ./results/Class2_W30_pad100/Merged_S7_S12.unique.bw \
+  --gtf /data/gent/vo/000/gvo00027/resources/Ensembl_transcriptomes/Homo_sapiens/GRCh38/Homo_sapiens.GRCh38.109.chrIS_spikes_45S.gtf \
+  --peaks ./results/Class2_W30_pad100/peaks.tsv \
+  --qc ./results/Class2_W30_pad100/qc_coverage_summary.tsv \
+  --primer ./results/Class2_W30_pad100/primer_targets.bed \
+  --yaxis depth \
+  --out ENSG00000125835_prct_Class2W30pad100.png
+
+ENSG00000041357
+
+python ./bin/select_best_primer.py \
+    --report results/Class1_test/primer_alignment_report.tsv \
+    --summary results/Class1_test/primer_alignment_summary.tsv \
+    --out best_primers_normal.tsv
+
+  Rscript ./bin/MakePlots_new.R \
+  --gene ENSG00000034510 \
+  --bw ./results/Class1_test/Merged_S7_S12.bw \
+  --gtf /data/gent/vo/000/gvo00027/resources/Ensembl_transcriptomes/Homo_sapiens/GRCh38/Homo_sapiens.GRCh38.109.chrIS_spikes_45S.gtf \
+  --peaks ./results/Class1_test/peaks.tsv \
+  --qc ./results/Class1_test/qc_coverage_summary.tsv \
+  --primer ./results/Class1_test/primer_targets.bed \
+  --out ENSG00000034510_class1.png
 
 
 Rscript ./bin/MakePlots.R \
@@ -74,7 +121,7 @@ Rscript ./bin/MakePlots.R \
   
 >ENSG00000197170|17:67340726-67340839(-)
 TCTTAGTGCTTTAGAAAAAAGTTAAAATTGGAAGTCATTAAAAAAAGACTGTTATAATGGTGTATATGTTGGGGTTTTTT
-TTCTAAGCTTCTTTGTCTTAAATTTTAAAATAGT G [TAAAACGACGGCCAG] does not exist in any transcript
+TTCTAAGCTTCTTTGTCTTAAATTTTAAAATAGT [GTAAAACGACGGCCAG] does not exist in any transcript
 
 TCTTAGTGCTTTAGAAAAAAGTTAAAATTGGAAGTCATTAAAAAAAGACTGTTATAATGGTGTATATGTTGGGGTTTTTT
 TTCTAAGCTTCTTTGTCTTAAATTTTAAAATAGTGTAAAACGACGGCCAG
@@ -82,3 +129,33 @@ TTCTAAGCTTCTTTGTCTTAAATTTTAAAATAGTGTAAAACGACGGCCAG
 
 GAATATGTTTGAGACTCCCTTTGACC TTTCAGTTCCCCAAGTTCATTGTTAACTTTGCATTTGC
 GAATATGTTTGAGACTCCCTTTGACC
+
+
+Rscript ./bin/utils_extractseq.R /data/gent/vo/000/gvo00027/resources/Ensembl_genomes/Homo_sapiens/GRCh38/Homo_sapiens.GRCh38.dna.primary_assembly.chrIS_spikes_45S.fa 17 67340726 67340839
+
+nextflow run primer3.nf -profile local --fasta "/user/gent/446/vsc44685/ScratchVO_dir/OncoRNA_peakprime/Primer_PeakFindR/testdata/test_target.fa" --primer3_settings 'config/primer3_settings.txt'
+
+SEQUENCE_PRIMER_REVCOMP=CTGGCCGTCGTTTTAC
+SEQUENCE_PRIMER_REVCOMP=CTGGCCGTCGTTTTAC
+universal_seq <- "GTAAAACGACGGCCAG"
+
+
+
+
+nextflow run main.nf -profile local \
+  --bam ./testdata/Merged_S7_S12.unique.bam \
+  --fasta /data/gent/vo/000/gvo00027/resources/Ensembl_genomes/Homo_sapiens/GRCh38/Homo_sapiens.GRCh38.dna.primary_assembly.chrIS_spikes_45S.fa \
+  --gtf /data/gent/vo/000/gvo00027/resources/Ensembl_transcriptomes/Homo_sapiens/GRCh38/Homo_sapiens.GRCh38.109.chrIS_spikes_45S.gtf \
+  --genes ./testdata/Class1_filt.txt \
+  --pad 100 \
+  --smooth_k 31 \
+  --sliding_window true \
+  --min_window_mean_pct 30 \
+  --max_gap 10 \
+  --trim_low_coverage_pct 20 \
+  --min_exonic_fraction 0.9 \
+  --trim_to_exon true \
+  --primer3_settings config/primer3_settings.txt \
+  --transcriptome_index /data/gent/vo/000/gvo00027/resources/Bowtie2_index/Homo_sapiens/Transcriptome_Homo_sapiens.GRCh38.109.chrIS_spikes_45S/bowtie2_index \
+  --transcriptome_fasta /data/gent/vo/000/gvo00027/resources/Ensembl_transcriptomes/Homo_sapiens/GRCh38/Homo_sapiens.GRCh38.109.chrIS_spikes_45S.fa \
+  --outdir results/Class1_W30_pad100_uniqBAM

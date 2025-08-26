@@ -293,6 +293,23 @@ Primers are classified based on transcriptome alignment patterns:
 - **Cross-reference Mapping**: Maps transcript IDs to actual gene symbols
 - **Specificity Context**: Shows which genes primers actually target vs. intended targets
 
+## Coverage Plotting and Visualization
+
+### MakePlots_new.R Script
+
+`MakePlots_new.R` is an R script for visualizing gene coverage, isoform structure, and primer locations from RNA-seq data processed by the PeakPrime pipeline. It reads coverage (BigWig), gene annotation (GTF), peak window (TSV), QC metrics, and primer BED files, then produces a two-panel figure:
+
+- **Top panel:** Coverage across the full gene, with the selected window highlighted. Coverage is shown as a filled area plot (`geom_area`), and the title displays the coordinates of the selected window.
+- **Bottom panel:** Isoform structure (exons as blocks, introns as lines) for all transcripts, plus primer locations (arrows) if provided. The selected window is also highlighted.
+
+The script supports multiple y-axis modes (percent, depth, log10), optional QC annotation, and customizable output size. It is designed for publication-quality figures and troubleshooting of primer selection.
+
+#### Example Output
+
+![Coverage and Isoform Plot Example](ENSG00000089009_prct_Class1.png)
+
+---
+
 ## Example Files
 
 ### Gene List Format
