@@ -4,26 +4,7 @@
 // transcriptome alignment QC.
 nextflow.enable.dsl=2
 
-params.bam                 = null        // input RNA‑seq BAM (spliced alignments)
-params.gtf                 = null        // gene annotation (same build as BAM)
-params.genes               = null        // text file: one Ensembl gene ID per line
-params.genome_package      = 'BSgenome.Hsapiens.UCSC.hg38' // 'BSgenome.Hsapiens.UCSC.hg38' choose the genome that matches the bam file, Bioconductor genome
-params.fasta               = null        // optional: genome FASTA file (alternative to BSgenome)
-params.pad                 = 60          // ±bp around peak
-params.smooth_k            = 31          // smoothing window (odd integer)
-params.sliding_window      = false       // enable sliding-window selection when QC fails
-params.min_window_mean     = null        // minimum required mean coverage across window (absolute value)
-params.min_window_mean_pct = null        // minimum window mean as % of gene peak coverage (overrides min_window_mean)
-params.max_gap             = null        // maximum allowed longest zero-coverage run (null to disable)
-params.search_slop         = 1000        // extra bases for BigWig import per chromosome
-params.trim_to_exon        = false       // trim final window to the exon containing the peak
-params.trim_low_coverage_pct = null     // trim window ends with coverage below X% of window peak (0-100)
-params.min_exonic_fraction = null        // minimum required exonic fraction of window (0-1)
-params.transcriptome_index = null        // bowtie2 index prefix for human transcriptome (e.g., 'transcriptome_idx')
-params.transcriptome_fasta = null        // transcriptome FASTA file for gene name mapping in alignment analysis
-params.max_primers_per_gene = 3          // maximum primers per gene for alignment QC
-params.primer3_settings    = 'config/primer3_settings.txt' // default settings
-params.outdir              = 'results'
+// Parameters are now loaded from params.config
 
 process BAM_INDEX {
   tag "$bam.baseName"

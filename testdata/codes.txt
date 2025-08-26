@@ -1,3 +1,84 @@
 samtools view -h -F 2308 /user/gent/446/vsc44685/ScratchVO_dir/OncoRNA_peakprime/Primer_PeakFindR/testdata/Merged_S7_S12.bam \
 | awk 'BEGIN{OFS="\t"} /^@/ || $0 ~ /\tNH:i:1(\t|$)/' \
 | samtools view -@8 -b -o /user/gent/446/vsc44685/ScratchVO_dir/OncoRNA_peakprime/Primer_PeakFindR/testdata/Merged_S7_S12.unique.bam -
+
+
+
+p <- plot_window_with_primer(
+  gene_id   = "ENSG00000008988",
+  bw        = "./results/high/Merged_S7_S12.bw",
+  gtf       = "/data/gent/vo/000/gvo00027/resources/Ensembl_transcriptomes/Homo_sapiens/GRCh38/Homo_sapiens.GRCh38.109.chrIS_spikes_45S.gtf",
+  peaks_tsv = "./results/high/peaks.tsv",
+  primer_bed = "./results/high/primer_targets.bed",   # optional if you have it now
+  qc_tsv     = "./results/high/qc_coverage_summary.tsv",
+  slop       = 0,     # the window is already what you selected; set >0 if you want a little context
+  log10_y    = FALSE
+)
+print(p)
+ggsave(sprintf("plot_%s.png", "ENSG00000008988"), p, width = 8, height = 4.5, dpi = 300)
+
+
+chmod +x ./bin/MakePlots.R
+
+
+Rscript ./bin/MakePlots_new.R \
+  --gene ENSG00000122566 \
+  --bw ./results/high/Merged_S7_S12.bw \
+  --gtf /data/gent/vo/000/gvo00027/resources/Ensembl_transcriptomes/Homo_sapiens/GRCh38/Homo_sapiens.GRCh38.109.chrIS_spikes_45S.gtf \
+  --peaks ./results/high/peaks.tsv \
+  --qc ./results/high/qc_coverage_summary.tsv \
+  --primer ./results/high/primer_targets.bed \
+  --yaxis depth \
+  --out ENSG00000122566_GPT5_high.png
+
+
+
+chmod +x ./bin/MakePlots.R
+
+Rscript ./bin/MakePlots_new.R \
+  --gene ENSG00000197170 \
+  --bw ./results/Class3/Merged_S7_S12.bw \
+  --gtf /data/gent/vo/000/gvo00027/resources/Ensembl_transcriptomes/Homo_sapiens/GRCh38/Homo_sapiens.GRCh38.109.chrIS_spikes_45S.gtf \
+  --peaks ./results/Class3/peaks.tsv \
+  --qc ./results/Class3/qc_coverage_summary.tsv \
+  --primer ./results/Class3/primer_targets.bed \
+  --yaxis depth \
+  --out ENSG00000197170_class3.png
+
+
+Rscript ./bin/MakePlots.R \
+  --gene ENSG00000122566 \
+  --bw ./results/high/Merged_S7_S12.bw \
+  --gtf /data/gent/vo/000/gvo00027/resources/Ensembl_transcriptomes/Homo_sapiens/GRCh38/Homo_sapiens.GRCh38.109.chrIS_spikes_45S.gtf \
+  --peaks ./results/high/peaks.tsv \
+  --qc ./results/high/qc_coverage_summary.tsv \
+  --primer ./results/high/primer_targets.bed \
+  --out ENSG00000122566_high.png
+
+Rscript ./bin/MakePlots.R \
+  --gene ENSG00000008988 \
+  --bw ./results/med/Merged_S7_S12.bw \
+  --gtf /data/gent/vo/000/gvo00027/resources/Ensembl_transcriptomes/Homo_sapiens/GRCh38/Homo_sapiens.GRCh38.109.chrIS_spikes_45S.gtf \
+  --peaks ./results/med/peaks.tsv \
+  --qc ./results/med/qc_coverage_summary.tsv \
+  --primer ./results/med/primer_targets.bed \
+  --yaxis depth \
+  --out ENSG00000008988_med.png
+
+
+  cat /data/gent/vo/000/gvo00027/resources/Ensembl_transcriptomes/Homo_sapiens/GRCh38/Homo_sapiens.GRCh38.109.chrIS_spikes_45S.fa | grep ENST00000357146
+  
+  
+
+
+  
+>ENSG00000197170|17:67340726-67340839(-)
+TCTTAGTGCTTTAGAAAAAAGTTAAAATTGGAAGTCATTAAAAAAAGACTGTTATAATGGTGTATATGTTGGGGTTTTTT
+TTCTAAGCTTCTTTGTCTTAAATTTTAAAATAGT G [TAAAACGACGGCCAG] does not exist in any transcript
+
+TCTTAGTGCTTTAGAAAAAAGTTAAAATTGGAAGTCATTAAAAAAAGACTGTTATAATGGTGTATATGTTGGGGTTTTTT
+TTCTAAGCTTCTTTGTCTTAAATTTTAAAATAGTGTAAAACGACGGCCAG
+
+
+GAATATGTTTGAGACTCCCTTTGACC TTTCAGTTCCCCAAGTTCATTGTTAACTTTGCATTTGC
+GAATATGTTTGAGACTCCCTTTGACC

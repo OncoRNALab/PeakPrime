@@ -12,8 +12,10 @@ results/
 results_*/
 output/
 outputs/
+bin/BinSize_check.R
 
 # Test data (may be large)
+testdata/*
 testdata/*.bam
 testdata/*.bai
 testdata/*.bw
