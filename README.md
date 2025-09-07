@@ -1,341 +1,239 @@
-# PeakPrime — RNA-seq primer design pipeline
+# PeakPrime — MACS2-based 3'end RNA-seq primer design pipeline
 
+Primer PeakFindR is a Nextflow pipeline that uses **MACS2 peak calling** to identify high-coverage regions in RNA-seq data and designs strand-specific cDNA primers with comprehensive quality control and visualization.
 
-PeakPrime quickly finds peak-covered, exon-aware windows in RNA-seq data and designs strand-correct cDNA primers with robust QC.
+## 🔬 Why Primer PeakFindR?
 
-Why PeakPrime?
+- **Peak-based target identification**: Uses MACS2 to find statistically significant coverage peaks
+- **MACS2-aware quality control**: Integrates peak scores, p-values, and exonic overlap metrics
+- **Strand-specific primer design**: Ensures primers are appropriate for cDNA amplification
+- **Comprehensive visualization**: Coverage plots with peak overlays and all-peaks visualization
+- **Optional transcriptome QC**: Bowtie2-based specificity checks to detect cross-reactivity
 
-- Peak-centered first: fast and biologically sensible default
-- Sliding-window rescue: can search for better windows when the peak window fails QC
-- Strand-aware primer selection for cDNA assays
-- Optional transcriptome alignment QC to detect cross-reactivity
+## 🚀 Pipeline Overview
 
-## Features
+### Core Workflow
+1. **Peak calling**: MACS2 identifies significant coverage peaks from RNA-seq BAM files
+2. **Peak processing**: Filters peaks by quality metrics and exonic overlap
+3. **Target window selection**: Selects optimal regions around high-quality peaks
+4. **Primer design**: Uses Primer3 to generate strand-appropriate primer pairs
+5. **Quality control**: Optional transcriptome alignment to assess specificity
+6. **Visualization**: Generates publication-ready coverage plots with peak annotations
 
-- **Isoform‑agnostic Coverage analysis**: Extracts high-coverage regions from RNA-seq BAM files using BigWig conversion
-- **Advanced QC**: Coverage trimming, gap detection, sliding-window optimization
-- **Strand-specific primer selection**: Ensures primers match mRNA orientation for cDNA amplification
-- **Peak detection**: Identifies optimal target regions with configurable parameters
-- **Primer design**: Uses Primer3 for robust primer pair generation
-- **Transcriptome alignment QC**: Bowtie2-based specificity checks and Python analysis
+### Key Features
+- **MACS2 integration**: Leverages statistical peak calling for robust target identification
+- **Multiple QC strategies**: Peak score thresholds, p-value filtering, exonic fraction requirements
+- **Advanced visualization**: Shows coverage, gene structure, primers, and all peaks in context
+- **Flexible parameters**: Configurable peak calling, quality thresholds, and primer design settings
 
-## Requirements
+## 📋 Requirements
 
-- Nextflow (≥22.04.0)
-- Conda/Mamba for environment management
-- Required input files:
-  - BAM file from RNA-seq alignment
+- **Nextflow** (≥22.04.0)
+- **Conda/Mamba** for environment management
+- **Input files**:
+  - RNA-seq BAM file (indexed)
   - GTF annotation file
-  - Gene list (one gene per line)
+  - Gene list (one Ensembl gene ID per line)
   - Primer3 settings file
-  - Optional: Pre-built Bowtie2 transcriptome index
 
-## Install
+## 🛠️ Installation
+
 ```bash
-git clone git@github.com:OncoRNALab/PeakPrime.git
+git clone https://github.com/OncoRNALab/PeakPrime.git 
 ```
 
-## Quick Start
+## 🚀 Quick Start
 
-## Example Usage
-
-### Basic Usage
-
+### Basic Primer Design
 ```bash
 nextflow run main.nf \
   --bam sample.bam \
   --gtf annotations.gtf \
   --genes gene_list.txt \
-  --primer3_settings primer3_settings.txt \
-  --outdir results/
+  --outdir results/ \
+  -profile local
 ```
 
-### With Advanced Quality Control
-
+### With Custom MACS2 Parameters
 ```bash
 nextflow run main.nf \
   --bam sample.bam \
   --gtf annotations.gtf \
   --genes gene_list.txt \
-  --primer3_settings primer3_settings.txt \
-  --sliding_window \
-  --min_window_mean_pct 20 \
-  --max_gap 50 \
-  --trim_low_coverage_pct 10 \
-  --trim_to_exon \
-  --min_exonic_fraction 0.8 \
-  --outdir results/
+  --macs2_pvalue_threshold 0.01 \
+  --macs2_min_peak_score 10 \
+  --outdir results/ \
+  -profile local
 ```
 
-### Complete Example with All Features
-
+### Generate Visualization Plots
 ```bash
-# Using pre-built transcriptome Bowtie2 index with gene name mapping (recommended)
-nextflow run main.nf \
-  --bam sample_rnaseq.bam \
-  --gtf gencode.v44.annotation.gtf \
-  --genes target_genes.txt \
-  --primer3_settings config/primer3_settings.txt \
-  --fasta GRCh38.primary_assembly.fa \
-  --pad 75 \
-  --smooth_k 51 \
-  --sliding_window \
-  --min_window_mean_pct 15 \
-  --max_gap 30 \
-  --trim_low_coverage_pct 5 \
-  --trim_to_exon \
-  --min_exonic_fraction 0.75 \
-  --transcriptome_index transcriptome_index \
-  --transcriptome_fasta gencode.v44.transcripts.fa \
-  --max_primers_per_gene 3 \
-  --outdir results_comprehensive/
+# First run the main pipeline, then generate plots
+nextflow run main.nf --makeplots \
+  --bw results/sample.bam.bw \
+  --gtf annotations.gtf \
+  --genes gene_list.txt \
+  --peaks_tsv results/selected_peaks.tsv \
+  --qc_tsv results/peaks_qc_summary.tsv \
+  --primer_targets_bed results/primer_targets.bed \
+  --narrowpeak results/macs2_peaks/sample_peaks.narrowPeak \
+  --outdir plots/ \
+  -profile local
 ```
 
-### Setting Up Transcriptome Index
-
-To use transcriptome alignment QC, first build a Bowtie2 index from your transcriptome FASTA:
-
-```bash
-# Build Bowtie2 index (one-time setup)
-bowtie2-build transcriptome.fasta transcriptome_index
-```
-
-## Parameters
+## ⚙️ Parameters
 
 ### Required Parameters
+| Parameter | Description |
+|-----------|-------------|
+| `--bam` | RNA-seq BAM file (must be indexed) |
+| `--gtf` | Gene annotation GTF file |
+| `--genes` | Text file with one Ensembl gene ID per line |
 
-- `--bam`: Path to RNA-seq BAM file
-- `--gtf`: Path to GTF annotation file  
-- `--genes`: Path to gene list file (one gene per line)
-- `--primer3_settings`: Path to Primer3 settings file
-- `--outdir`: Output directory for results
+### MACS2 Peak Calling Parameters
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `--macs2_pvalue_threshold` | 0.05 | P-value threshold for peak significance |
+| `--macs2_min_peak_score` | 0 | Minimum peak score threshold |
 
-### Optional Parameters
+### Primer Design Parameters
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `--pad` | 60 | Padding around peak center (bp) |
+| `--primer3_settings` | config/primer3_settings.txt | Primer3 configuration file |
+| `--genome_package` | BSgenome.Hsapiens.UCSC.hg38 | R/Bioconductor genome package |
+| `--fasta` | null | Genome FASTA file (alternative to BSgenome) |
 
-#### Coverage Analysis
-- `--fasta`: Reference genome FASTA file for sequence extraction
-- `--pad`: Padding around gene regions in bp (default: 60)
-- `--smooth_k`: Smoothing kernel size for coverage (default: 31, must be odd)
-- `--genome_package`: R/Bioconductor genome package name (default: 'BSgenome.Hsapiens.UCSC.hg38')
+### Quality Control Parameters
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `--min_exonic_fraction` | null | Minimum required exonic fraction (0-1) |
+| `--smooth_k` | 31 | Smoothing window for coverage (odd integer) |
+| `--search_slop` | 1000 | Extra bases for BigWig import |
 
-#### Peak Detection and Window Selection
-- `--sliding_window`: Enable sliding window analysis for better peak selection
-- `--min_window_mean`: Minimum mean coverage required across the final window (absolute value)
-- `--min_window_mean_pct`: Minimum coverage as percentage of gene's peak coverage (0-100, overrides `--min_window_mean`)
-- `--max_gap`: Maximum allowed longest zero-coverage run within the final window
-- `--search_slop`: Extra bases around exon span for coverage import (default: 1000)
+### Transcriptome Alignment QC (Optional)
+| Parameter | Description |
+|-----------|-------------|
+| `--transcriptome_index` | Bowtie2 transcriptome index prefix |
+| `--transcriptome_fasta` | Transcriptome FASTA for gene mapping |
+| `--max_primers_per_gene` | Maximum primers per gene for QC (default: 20) |
 
-#### Window Refinement
-- `--trim_to_exon`: Trim final window to boundaries of exon containing the peak (prevents intronic spillover)
-- `--trim_low_coverage_pct`: Trim window ends with coverage below X% of window peak (0-100, e.g., 10 for 10%)
-- `--min_exonic_fraction`: Minimum required exonic fraction of window (0-1, for quality control)
+### Plotting Parameters (for --makeplots mode)
+| Parameter | Description |
+|-----------|-------------|
+| `--bw` | BigWig coverage file |
+| `--peaks_tsv` | Selected peaks TSV file |
+| `--qc_tsv` | QC summary TSV file |
+| `--primer_targets_bed` | Primer targets BED file |
+| `--narrowpeak` | MACS2 narrowPeak file (for all-peaks visualization) |
 
-#### Transcriptome Alignment QC
-- `--transcriptome_index`: Path to pre-built Bowtie2 transcriptome index prefix
-- `--transcriptome_fasta`: Transcriptome FASTA file for gene name mapping (optional but recommended)
-- `--max_primers_per_gene`: Maximum primers per gene for alignment (default: 3)
+## 📁 Output Files
 
-## Output Files
+### Main Pipeline Outputs
 
-### Core Pipeline Outputs
-- `primer_targets.fa`: Target sequences for primer design in FASTA format
-- `primer_targets.bed`: Genomic coordinates of target regions in BED format
-- `peaks.tsv`: Detailed peak information with coverage statistics and quality metrics
-- `qc_coverage_summary.tsv`: Comprehensive quality control summary for each gene
-- `primer3_input.txt`: Formatted input file for Primer3
-- `primer3_output.txt`: Raw Primer3 results with all primer candidates
-- `cdna_primers.tsv`: Final cDNA-appropriate primer pairs (strand-specific selection)
+#### Peak Calling Results
+- `macs2_peaks/`: MACS2 output directory
+  - `*_peaks.narrowPeak`: Detected peaks in narrowPeak format
+  - `*_summits.bed`: Peak summits
+  - `*_peaks.xls`: Detailed peak information
 
-### Transcriptome Alignment QC (if enabled)
-- `primers_for_alignment.fa`: Primer sequences in FASTA format for alignment
-- `primers_alignment.bam`: Bowtie2 alignment results of primers against transcriptome
-- `primers_alignment.bam.bai`: BAM index file
-- `alignment_stats.txt`: Bowtie2 alignment statistics
-- `primer_alignment_report.tsv`: Summary statistics and quality classification per primer
-- `primer_alignment_summary.tsv`: Detailed per-alignment summary with gene names (MAPQ=255 only)
+#### Selected Targets
+- `selected_peaks.tsv`: Final selected peak windows with coordinates and QC metrics
+- `primer_targets.bed`: Target regions in BED format
+- `primer_targets.fa`: Target sequences in FASTA format
 
-### Output File Details
+#### Quality Control
+- `peaks_qc_summary.tsv`: Comprehensive QC metrics for each gene:
+  - Peak scores, p-values, q-values
+  - Exonic fraction calculations
+  - Coverage statistics
+  - Selection strategy used
 
-#### `peaks.tsv`
-Contains information about selected primer target regions:
-- `gene`: Gene identifier
-- `chr`: Chromosome
-- `start`/`end`: Genomic coordinates of target window
-- `strand`: Gene strand orientation
-- `exonic_fraction`: Fraction of window that overlaps exons (0-1)
-- `trimmed_to_exon`: Whether window was trimmed to exon boundaries
-- `fail_exonic_fraction`: Whether window failed exonic fraction threshold
+#### Primer Design Results
+- `primer3_input.txt`: Formatted Primer3 input
+- `primer3_output.txt`: Raw Primer3 results
+- `cdna_primers.tsv`: Final strand-appropriate primer pairs
 
-#### `qc_coverage_summary.tsv`  
-Comprehensive quality control metrics for each gene:
-- `gene`: Gene identifier
-- `total_exonic_bases`: Total exonic length for the gene
-- `max_cov`/`mean_cov`/`median_cov`: Coverage statistics across all exons
-- `peak_pos`: Position of maximum coverage after smoothing
-- `window_start`/`window_end`: Final target window coordinates
-- `window_mean`/`window_median`/`window_min`/`window_max`: Window coverage statistics
-- `window_zeros`: Number of zero-coverage positions in window
-- `longest_zero_run`: Length of longest consecutive zero-coverage stretch
-- `pass_min_mean`/`pass_max_gap`: Quality control pass/fail flags
-- `strategy`: Window selection strategy used (e.g., "peak_centered", "sliding_best", "peak_centered+trimmed")
-- `exonic_fraction`: Fraction of final window overlapping exons
-- `fail_exonic_fraction`: Whether window failed exonic fraction requirements
-- `trimmed_to_exon`: Whether window was trimmed to exon boundaries
+#### Coverage Data
+- `*.bam.bw`: BigWig coverage files for visualization
 
-#### `cdna_primers.tsv`
-Final strand-appropriate primer pairs for cDNA amplification:
-- `gene_id`: Target gene identifier
-- `primer_index`: Primer pair index (from Primer3)
-- `primer_type`: LEFT or RIGHT primer
-- `primer_sequence`: Primer sequence
-- `primer_tm`: Melting temperature
-- `primer_gc`: GC content percentage
-- `gene_strand`: Strand orientation of target gene
+### Transcriptome QC Outputs (if enabled)
+- `primers_for_alignment.fa`: Primer sequences for alignment
+- `primers_alignment.bam`: Bowtie2 alignment results
+- `primer_alignment_report.tsv`: Specificity classification per primer
+- `primer_alignment_summary.tsv`: Detailed alignment information
 
-#### `primer_alignment_report.tsv` (if transcriptome QC enabled)
-Summary statistics per primer:
-- `gene_id`: Target gene identifier
-- `primer_index`: Primer pair index
-- `primer_type`: LEFT or RIGHT primer
-- `primer_sequence`: Primer sequence
-- `gene_strand`: Target gene strand
-- `num_alignments`: Total number of transcriptome alignments
-- `alignment_quality`: Quality classification (PERFECT/GOOD/MODERATE/POOR/FAIL)
-- `best_mapq`: Highest MAPQ score among all alignments
+### Visualization Outputs (--makeplots mode)
+- `plot_<gene_id>.png`: Coverage plots with gene structure and peaks
 
-#### `primer_alignment_summary.tsv` (if transcriptome QC enabled)
-Detailed alignment information for primers that align in forward direction only (5' to 3' orientation):
-- `gene_id`: Target gene identifier
-- `primer_index`: Primer pair index
-- `primer_type`: LEFT or RIGHT primer
-- `primer_sequence`: Primer sequence (reported in 5' to 3' orientation)
-- `gene_strand`: Target gene strand
-- `aligned_transcript`: Transcript ID from alignment
-- `aligned_gene_name`: Gene name extracted from transcriptome FASTA headers
-- `alignment_start`/`alignment_end`: Alignment coordinates on transcript
-- `alignment_length`: Length of alignment
-- `alignment_strand`: Always "forward" (reverse alignments are filtered out)
-- `alignment_mapq`: Mapping quality score (255 = perfect/unique alignment)
-- `mismatches`: Number of mismatches in alignment
-- `distance_to_end`: Distance from primer start to transcript end (strand-specific)
-- `transcript_length`: Total length of aligned transcript
+## 📊 Visualization Features
 
-## Quality Control Features
+The pipeline generates comprehensive visualization plots showing:
 
-### Coverage Analysis and Peak Selection
-The pipeline implements sophisticated coverage analysis to identify optimal primer target regions:
+### Coverage Plot (Top Panel)
+- **RNA-seq coverage**: Area plot across the entire gene
+- **Selected window**: Highlighted region chosen for primer design
+- **QC metrics**: Peak scores, p-values, and coverage statistics in subtitle
 
-- **Smoothed Coverage**: Uses running mean smoothing to reduce noise in coverage data
-- **Peak Detection**: Identifies the highest coverage position within each gene's exonic regions
-- **Window Selection**: Creates windows around peaks with configurable padding
+### Feature Plot (Bottom Panel)
+- **Gene structure**: All isoforms with exons (blocks) and introns (lines)
+- **Primer locations**: Arrows showing designed primer positions
+- **All MACS2 peaks**: **NEW!** Horizontal bars showing all detected peaks within the gene
+- **Peak intensity**: Color-coded by peak score/significance
 
-### Advanced Window Quality Control
-
-#### Sliding Window Analysis
-When `--sliding_window` is enabled, the pipeline can search for better target windows if the initial peak-centered window fails quality thresholds:
-- Searches across the entire exonic span of the gene
-- Finds the window with maximum mean coverage that meets quality criteria
-- Respects gap and coverage thresholds during search
-
-#### Coverage-Based Trimming
-Multiple trimming strategies ensure high-quality target regions:
-
-- **Low Coverage Trimming** (`--trim_low_coverage_pct`): Removes window ends with coverage below a specified percentage of the window's peak coverage
-- **Exonic Boundary Trimming** (`--trim_to_exon`): Trims windows to the boundaries of the exon containing the coverage peak
-- **Quality Thresholds**: Configurable minimum mean coverage requirements (absolute or percentage-based)
-
-#### Gap Analysis
-- **Zero-Coverage Detection**: Identifies stretches of zero coverage within target windows  
-- **Gap Filtering** (`--max_gap`): Rejects or searches for alternative windows if gaps exceed thresholds
-- **Quality Classification**: Flags windows that fail quality criteria
-
-### Strand-Specific Primer Selection
-For cDNA amplification, the pipeline selects biologically appropriate primers based on correct orientation: Uses LEFT primers (direct match of template matches mRNA) 
-- **Biological Logic**: Ensures primers match the mRNA sequence orientation for proper cDNA amplification
-
-
-### Transcriptome Alignment QC
-Fast Python-based quality control through transcriptome alignment:
-
-#### Alignment Strategy
-- **Comprehensive Mapping**: Uses Bowtie2 with `-a` flag to report all valid alignments
-- **Forward Strand Filtering**: Only reports primers that align in forward direction (5' to 3')
-- **Specificity Assessment**: Evaluates primer specificity against the entire transcriptome
-- **Cross-reactivity Detection**: Identifies primers that may amplify unintended targets
-
-#### Quality Classification System
-Primers are classified based on transcriptome alignment patterns:
-- **PERFECT (1 alignment)**: Unique alignment, highest specificity
-- **GOOD (2-5 alignments)**: Limited cross-reactivity, generally acceptable
-- **MODERATE (6-20 alignments)**: Some cross-reactivity, use with caution
-- **POOR (>20 alignments)**: High cross-reactivity, likely problematic
-- **FAIL (0 alignments)**: No transcriptome match, may indicate design issues
-
-#### Gene Name Resolution
-- **FASTA Header Parsing**: Extracts gene names from transcriptome FASTA headers
-- **Cross-reference Mapping**: Maps transcript IDs to actual gene symbols
-- **Specificity Context**: Shows which genes primers actually target vs. intended targets
-
-## Coverage Plotting and Visualization
-
-### MakePlots_new.R Script
-
-`MakePlots_new.R` is an R script for visualizing gene coverage, isoform structure, and primer locations from RNA-seq data processed by the PeakPrime pipeline. It reads coverage (BigWig), gene annotation (GTF), peak window (TSV), QC metrics, and primer BED files, then produces a two-panel figure:
-
-- **Top panel:** Coverage across the full gene, with the selected window highlighted. Coverage is shown as a filled area plot (`geom_area`), and the title displays the coordinates of the selected window.
-- **Bottom panel:** Isoform structure (exons as blocks, introns as lines) for all transcripts, plus primer locations (arrows) if provided. The selected window is also highlighted.
-
-The script supports multiple y-axis modes (percent, depth, log10), optional QC annotation, and customizable output size. It is designed for publication-quality figures and troubleshooting of primer selection.
-
-### Example usage
-
+### Example Visualization
 ```bash
-#bioconductor required
-Rscript ./bin/MakePlots_new.R \
+# Generate plot for a single gene
+Rscript bin/MakePlots_new.R \
   --gene ENSG00000067191 \
-  --bw ./results/Class4_W20_pad140/Merged_S7_S12.unique.bw \
-  --gtf /data/gent/vo/000/gvo00027/resources/Ensembl_transcriptomes/Homo_sapiens/GRCh38/Homo_sapiens.GRCh38.109.chrIS_spikes_45S.gtf \
-  --peaks ./results/Class4_W20_pad140/peaks.tsv \
-  --qc ./results/Class4_W20_pad140/qc_coverage_summary.tsv \
-  --primer ./results/Class4_W20_pad140/primer_targets.bed \
-  --out ENSG00000067191_class4_pad140W20.png
-```
-
-#### Example Output
-
-![Coverage and Isoform Plot Example](ENSG00000089009_prct_Class1.png)
-
-The plots now include an additional track showing **all MACS2-called peaks** within the gene span:
-- **Coverage track** (top): Shows RNA-seq coverage with highlighted selected peak window
-- **Isoform tracks** (middle): Gene structure with exons and introns for all isoforms
-- **Primer track**: Shows designed primer locations (if available)  
-- **All Peaks track** (bottom): **NEW!** Horizontal bars showing all MACS2 peaks colored by intensity
-
-To include all peaks in your plots, provide the MACS2 narrowPeak file:
-```bash
-nextflow run main.nf --makeplots \
-  --bw ./results/sample.bam.bw \
+  --bw results/sample.bam.bw \
   --gtf annotations.gtf \
-  --genes target_genes.txt \
-  --peaks_tsv ./results/peaks.tsv \
-  --qc_tsv ./results/qc_summary.tsv \
-  --primer ./results/primer_targets.bed \
-  --narrowpeak ./results/macs2_peaks/sample_peaks.narrowPeak \
-  --out ENSG00000067191_with_all_peaks.png
+  --peaks results/selected_peaks.tsv \
+  --qc results/peaks_qc_summary.tsv \
+  --primer results/primer_targets.bed \
+  --narrowpeak results/macs2_peaks/sample_peaks.narrowPeak \
+  --out ENSG00000067191_with_peaks.png
 ```
 
----
+## 🔧 Quality Control Features
 
-## Example Files
+### MACS2-Based Peak Selection
+- **Statistical significance**: Uses MACS2 p-values and q-values for peak filtering
+- **Peak scoring**: Considers peak scores for quality assessment
+- **Reproducible peak calling**: Consistent statistical framework across samples
 
-### Gene List Format
+### Advanced QC Metrics
+- **Exonic overlap**: Calculates fraction of peak overlapping exonic sequences
+- **Coverage validation**: Ensures selected regions have adequate coverage depth
+- **Peak quality thresholds**: Configurable p-value and score cutoffs
+
+### Primer Quality Assessment
+- **Strand specificity**: Ensures primers match mRNA orientation for cDNA
+- **Transcriptome specificity**: Optional cross-reactivity assessment
+- **Quality classification**: PERFECT/GOOD/MODERATE/POOR/FAIL scoring
+
+## 🧬 Biological Rationale
+
+### Peak-Based Target Selection
+- Uses statistically significant coverage peaks rather than arbitrary high-coverage regions
+- Ensures targets represent genuine transcriptional hotspots
+- Provides quantitative measures of peak significance
+
+### Strand-Specific Primer Design
+- Selects primers appropriate for cDNA amplification
+- Considers gene strand orientation for proper primer placement
+- Ensures compatibility with reverse transcription workflows
+
+## 📝 Example Configuration Files
+
+### Gene List Format (`gene_list.txt`)
 ```
-GENE1
-GENE2
-GENE3
+ENSG00000067191
+ENSG00000089009
+ENSG00000108468
 ```
 
-### Primer3 Settings Example
+### Primer3 Settings (`config/primer3_settings.txt`)
 ```
 PRIMER_PRODUCT_SIZE_RANGE=75-150
 PRIMER_NUM_RETURN=5
@@ -348,7 +246,6 @@ PRIMER_MAX_TM=63.0
 PRIMER_MIN_GC=20.0
 PRIMER_MAX_GC=80.0
 PRIMER_MAX_POLY_X=4
-PRIMER_INTERNAL_MAX_POLY_X=4
 PRIMER_SALT_MONOVALENT=50.0
 PRIMER_DNA_CONC=50.0
 PRIMER_MAX_NS_ACCEPTED=0
@@ -359,25 +256,66 @@ PRIMER_PAIR_MAX_COMPL_END=8
 =
 ```
 
-## Troubleshooting
+## 🔍 Troubleshooting
 
 ### Common Issues
 
-1. **Missing BAM index**: The pipeline automatically creates BAM indices if missing
-2. **Memory issues**: Adjust Nextflow executor settings for large BAM files
-3. **Gene not found**: Ensure gene names in the gene list match those in the GTF file
-4. **No primers generated**: Check coverage depth and adjust quality control parameters
+1. **No peaks detected**
+   - Check MACS2 p-value threshold (try relaxing to 0.1)
+   - Verify sufficient coverage depth in input BAM
+   - Ensure genes are present in the BAM file
+
+2. **Peaks fail QC**
+   - Adjust exonic fraction requirements
+   - Check peak score thresholds
+   - Review coverage smoothing parameters
+
+3. **Memory issues**
+   - Increase process memory in nextflow.config
+   - Use appropriate computational profile (local vs pbs)
+
+4. **Visualization issues**
+   - Ensure BigWig files exist from main pipeline
+   - Check file paths in plotting commands
+   - Verify all required R packages are installed
 
 ### Performance Tips
 
-1. **Use pre-built transcriptome indices**: Much faster than building from FASTA each time
-2. **Limit primer count**: Use `--max_primers_per_gene` to reduce alignment time
-3. **Adjust coverage parameters**: Fine-tune quality thresholds based on your data depth
+1. **Optimize MACS2 parameters** for your data type and depth
+2. **Use appropriate computational profiles** (local for small datasets, pbs for large)
+3. **Pre-filter gene lists** to focus on genes of interest
+4. **Adjust memory allocations** based on your system capabilities
 
-## Citation
+## 🏗️ Profiles
 
-If you use this pipeline in your research, please cite the relevant tools:
-- Nextflow
-- Primer3
-- Bowtie2 (if using transcriptome alignment QC)
-- R/Bioconductor packages used in the analysis
+### Local Profile
+```bash
+nextflow run main.nf -profile local [other options]
+```
+- Uses local execution
+- Suitable for small datasets or testing
+- Default memory: 4 GB per process
+
+### PBS Profile
+```bash
+nextflow run main.nf -profile pbs [other options]
+```
+- Uses PBS job scheduler
+- Suitable for HPC environments
+- Configurable resource requirements
+
+## 📚 Citation
+
+If you use Primer PeakFindR in your research, please cite:
+
+- **MACS2**: Zhang et al. (2008) Model-based Analysis of ChIP-Seq (MACS). *Genome Biology*
+- **Nextflow**: Di Tommaso et al. (2017) Nextflow enables reproducible computational workflows. *Nature Biotechnology*
+- **Primer3**: Untergasser et al. (2012) Primer3—new capabilities and interfaces. *Nucleic Acids Research*
+
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit issues, feature requests, or pull requests.
+
+## 📄 License
+
+This pipeline is available under [appropriate license].
