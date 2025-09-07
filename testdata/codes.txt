@@ -2,7 +2,7 @@ samtools view -h -F 2308 /user/gent/446/vsc44685/ScratchVO_dir/OncoRNA_peakprime
 | awk 'BEGIN{OFS="\t"} /^@/ || $0 ~ /\tNH:i:1(\t|$)/' \
 | samtools view -@8 -b -o /user/gent/446/vsc44685/ScratchVO_dir/OncoRNA_peakprime/Primer_PeakFindR/testdata/Merged_S7_S12.unique.bam -
 
-
+cat /data/gent/vo/000/gvo00027/resources/Ensembl_transcriptomes/Homo_sapiens/GRCh38/Homo_sapiens.GRCh38.109.chrIS_spikes_45S.gtf | grep ENSG00000125835 > ENSG00000125835.gtf 
 
 p <- plot_window_with_primer(
   gene_id   = "ENSG00000008988",
@@ -159,3 +159,52 @@ nextflow run main.nf -profile local \
   --transcriptome_index /data/gent/vo/000/gvo00027/resources/Bowtie2_index/Homo_sapiens/Transcriptome_Homo_sapiens.GRCh38.109.chrIS_spikes_45S/bowtie2_index \
   --transcriptome_fasta /data/gent/vo/000/gvo00027/resources/Ensembl_transcriptomes/Homo_sapiens/GRCh38/Homo_sapiens.GRCh38.109.chrIS_spikes_45S.fa \
   --outdir results/Class1_W30_pad100_uniqBAM
+
+
+   Rscript ./bin/MakePlots_new.R \
+  --gene ENSG00000013306 \
+  --bw ./results/Class3_W20_pad60/Merged_S7_S12.unique.bw \
+  --gtf /data/gent/vo/000/gvo00027/resources/Ensembl_transcriptomes/Homo_sapiens/GRCh38/Homo_sapiens.GRCh38.109.chrIS_spikes_45S.gtf \
+  --peaks ./results/Class3_W20_pad60/peaks.tsv \
+  --qc ./results/Class3_W20_pad60/qc_coverage_summary.tsv \
+  --primer ./results/Class3_W20_pad60/primer_targets.bed \
+  --out ENSG00000013306_class3_pad60.png
+
+
+   Rscript ./bin/MakePlots_new.R \
+  --gene ENSG00000029993 \
+  --bw ./results/Class3_W20_pad60/Merged_S7_S12.unique.bw \
+  --gtf /data/gent/vo/000/gvo00027/resources/Ensembl_transcriptomes/Homo_sapiens/GRCh38/Homo_sapiens.GRCh38.109.chrIS_spikes_45S.gtf \
+  --peaks ./results/Class3_W20_pad60/peaks.tsv \
+  --qc ./results/Class3_W20_pad60/qc_coverage_summary.tsv \
+  --primer ./results/Class3_W20_pad60/primer_targets.bed \
+  --out ENSG00000029993_class3_pad60W20.png
+
+ENSG00000067191
+ 
+ Rscript ./bin/MakePlots_new.R \
+  --gene ENSG00000008988 \
+  --bw ./results/test_makePlots/Merged_S7_S12.unique.bw \
+  --gtf /data/gent/vo/000/gvo00027/resources/Ensembl_transcriptomes/Homo_sapiens/GRCh38/Homo_sapiens.GRCh38.109.chrIS_spikes_45S.gtf \
+  --peaks ./results/test_makePlots/peaks.tsv \
+  --qc ./results/test_makePlots/qc_coverage_summary.tsv \
+  --primer ./results/test_makePlots/primer_targets.bed \
+  --out ENSG00000008988_test.png
+
+Rscript ./bin/MakePlots_new.R \
+  --gene ENSG00000008988 \
+  --bw ./results/test_makePlots/Merged_S7_S12.unique.bw \
+  --gtf /data/gent/vo/000/gvo00027/resources/Ensembl_transcriptomes/Homo_sapiens/GRCh38/Homo_sapiens.GRCh38.109.chrIS_spikes_45S.gtf \
+  --peaks ./results/test_makePlots/peaks.tsv \
+  --qc ./results/test_makePlots/qc_coverage_summary.tsv \
+  --primer ./results/test_makePlots/primer_targets.bed \
+  --out ENSG00000008988_test2.png
+
+  
+  nextflow run main.nf -profile local --makeplots true --genes /user/gent/446/vsc44685/ScratchVO_dir/OncoRNA_peakprime/Primer_PeakFindR/results/test_makePlots/gene_ids.txt \
+  --bw /user/gent/446/vsc44685/ScratchVO_dir/OncoRNA_peakprime/Primer_PeakFindR/results/test_makePlots/Merged_S7_S12.unique.bw \
+  --gtf /data/gent/vo/000/gvo00027/resources/Ensembl_transcriptomes/Homo_sapiens/GRCh38/Homo_sapiens.GRCh38.109.chrIS_spikes_45S.gtf \
+  --peaks_tsv /user/gent/446/vsc44685/ScratchVO_dir/OncoRNA_peakprime/Primer_PeakFindR/results/test_makePlots/peaks.tsv \
+  --primer_targets_bed /user/gent/446/vsc44685/ScratchVO_dir/OncoRNA_peakprime/Primer_PeakFindR/results/test_makePlots/primer_targets.bed \
+  --qc_tsv /user/gent/446/vsc44685/ScratchVO_dir/OncoRNA_peakprime/Primer_PeakFindR/results/test_makePlots/qc_coverage_summary.tsv \
+  --outdir /user/gent/446/vsc44685/ScratchVO_dir/OncoRNA_peakprime/Primer_PeakFindR/results/test_makePlots

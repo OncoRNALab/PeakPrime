@@ -23,8 +23,21 @@ if (is.null(opt$primer3_output) || is.null(opt$peaks_tsv)) {
 }
 
 # Read peaks data to get strand information
-peaks <- read.delim(opt$peaks_tsv, stringsAsFactors = FALSE)
-gene_strands <- setNames(peaks$strand, peaks$gene)
+peaks <- read.delim(opt$peaks_tsv, sep="\t", header=TRUE, stringsAsFactors = FALSE)
+
+# Validate peaks table
+if (is.null(peaks) || nrow(peaks) == 0) {
+  cat("No peaks found in", opt$peaks_tsv, "- writing empty output and exiting\n")
+  write.table(data.frame(), opt$out_tsv, sep="\t", quote=FALSE, row.names=FALSE)
+  quit(status=0)
+}
+cat("Peaks table columns:", paste(colnames(peaks), collapse=", "), "\n")
+required_cols <- c("gene", "strand")
+missing_cols <- setdiff(required_cols, colnames(peaks))
+if (length(missing_cols) > 0) {
+  stop("Peaks file is missing required columns: ", paste(missing_cols, collapse=", "))
+}
+gene_strands <- setNames(as.character(peaks$strand), as.character(peaks$gene))
 
 # Parse Primer3 output
 parse_primer3_output <- function(file_path) {
@@ -77,6 +90,13 @@ parse_primer3_output <- function(file_path) {
 
 # Parse primer data
 primer_data <- parse_primer3_output(opt$primer3_output)
+
+# If Primer3 produced no records, write empty output and exit gracefully
+if (is.null(primer_data) || length(primer_data) == 0) {
+  cat("No primer records parsed from", opt$primer3_output, "- writing empty output\n")
+  write.table(data.frame(), opt$out_tsv, sep="\t", quote=FALSE, row.names=FALSE)
+  quit(status=0)
+}
 
 # Extract cDNA-complementary primers
 cdna_primers <- data.frame(

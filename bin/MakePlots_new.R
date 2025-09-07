@@ -10,6 +10,11 @@ suppressPackageStartupMessages({
 })
 
 # ---------- helpers ----------
+.normalize_chr <- function(x) {
+  # Normalize chromosome names by removing 'chr' prefix for consistent comparison
+  sub("^chr", "", x)
+}
+
 .pick_gene_col <- function(gr) {
   cand <- c("gene_id","gene","gene_name","geneid","geneId","GeneID")
   hit <- cand[cand %in% colnames(mcols(gr))]
@@ -51,7 +56,7 @@ suppressPackageStartupMessages({
 # ---------- core plotting ----------
 plot_gene_with_window <- function(
   gene_id, bw, gtf, peaks_tsv,
-  primer_bed = NULL, qc_tsv = NULL,
+  primer_bed = NULL, qc_tsv = NULL, narrowpeak_file = NULL,
   yaxis_mode = c("percent","depth","log10"),
   max_isoforms = Inf, cov_target_points = 6000L
 ) {
@@ -62,7 +67,7 @@ plot_gene_with_window <- function(
   gcol <- .pick_gene_col(gtf_gr)
   tcol <- .pick_tx_col(gtf_gr)
 
-  is_exon <- gtf_gr$type == "exon"
+  is_exon <- gtf_gr$type %in% "exon"
   gene_mask <- is_exon & (as.character(mcols(gtf_gr)[[gcol]]) == gene_id)
   gene_exons_all <- gtf_gr[gene_mask]
   if (!length(gene_exons_all)) stop(sprintf("Gene '%s' not found in GTF (column %s).", gene_id, gcol))
@@ -79,10 +84,20 @@ plot_gene_with_window <- function(
   peaks <- fread(peaks_tsv)
   if (!"gene" %in% names(peaks)) stop("peaks.tsv must have a 'gene' column.")
   prow <- peaks[gene == gene_id]
-  if (!nrow(prow)) stop(sprintf("Gene '%s' not present in %s", gene_id, peaks_tsv))
-  window_start <- as.integer(prow$start[1])
-  window_end   <- as.integer(prow$end[1])
-  if (is.na(window_start) || is.na(window_end)) stop("peaks.tsv must have integer 'start' and 'end' columns.")
+  
+  # Handle missing genes gracefully
+  if (!nrow(prow)) {
+    warning(sprintf("Gene '%s' not present in %s - likely filtered out by peak quality thresholds. Creating gene-only plot.", gene_id, basename(peaks_tsv)))
+    # Use entire gene span as window when no peaks are available
+    window_start <- gene_start
+    window_end   <- gene_end
+    has_peaks    <- FALSE
+  } else {
+    window_start <- as.integer(prow$start[1])
+    window_end   <- as.integer(prow$end[1])
+    if (is.na(window_start) || is.na(window_end)) stop("peaks.tsv must have integer 'start' and 'end' columns.")
+    has_peaks    <- TRUE
+  }
 
   # --- coverage over entire gene (interval ribbons; optional binning) ---
   cov_gr <- import(bw, which = gene_gr)
@@ -150,6 +165,11 @@ plot_gene_with_window <- function(
   intron_df[, y := match(transcript, tx_order)]
   valid_transcripts <- tx_order
   primer_lane <- length(valid_transcripts) + 1
+  peaks_lane <- primer_lane + 1
+
+  cat("Valid transcripts:", length(valid_transcripts), "\n")
+  cat("Primer lane:", primer_lane, "\n") 
+  cat("Peaks lane:", peaks_lane, "\n")
 
   # --- QC subtitle (optional) + annotate what 100% means ---
   qc_lab <- NULL
@@ -158,8 +178,17 @@ plot_gene_with_window <- function(
     if ("gene" %in% names(qc)) {
       qrow <- qc[gene == gene_id]
       if (nrow(qrow)) {
-        qc_lab <- sprintf("window_mean=%.1f; longest_zero_run=%d; strategy=%s",
-                          qrow$window_mean[1], qrow$longest_zero_run[1], qrow$strategy[1])
+        # Handle both old (coverage-based) and new (MACS2-based) QC formats
+        if ("window_mean" %in% names(qrow)) {
+          # Old format: coverage-based metrics
+          qc_lab <- sprintf("window_mean=%.1f; longest_zero_run=%d; strategy=%s",
+                            qrow$window_mean[1], qrow$longest_zero_run[1], qrow$strategy[1])
+        } else if ("peak_score" %in% names(qrow)) {
+          # New format: MACS2-based metrics
+          qc_lab <- sprintf("peak_score=%.1f; p-value=%.2f; q-value=%.2f; exonic_frac=%.2f; strategy=%s",
+                            qrow$peak_score[1], qrow$peak_pvalue[1], qrow$peak_qvalue[1], 
+                            qrow$exonic_fraction[1], qrow$strategy[1])
+        }
       }
     }
   }
@@ -175,8 +204,12 @@ plot_gene_with_window <- function(
     setnames(pb, 1:3, c("chr","start","end"))
     if (ncol(pb) >= 4) setnames(pb, 4, "name")  else pb[, name := "primer"]
     if (ncol(pb) >= 6) setnames(pb, 6, "strand") else pb[, strand := gene_strand]
-    pb <- pb[pb$chr == gene_chr & pb$start <= gene_end & pb$end >= gene_start]
+    # Normalize chromosome names for consistent comparison
+    pb <- pb[.normalize_chr(pb$chr) == .normalize_chr(gene_chr) & pb$start <= gene_end & pb$end >= gene_start]
     if (nrow(pb)) {
+      # Convert from 0-based BED coordinates to 1-based before clipping
+      pb$start <- as.integer(pb$start) + 1L
+      pb$end <- as.integer(pb$end)
       pb$start <- pmax(pb$start, gene_start)
       pb$end   <- pmin(pb$end,   gene_end)
       pb$xa    <- ifelse(pb$strand == "-", pb$end,   pb$start)  # 5′ →
@@ -185,10 +218,76 @@ plot_gene_with_window <- function(
     }
   }
 
+    # --- all MACS2 peaks (optional) ---
+  all_peaks_df <- NULL
+  if (!is.null(narrowpeak_file) && file.exists(narrowpeak_file)) {
+    # Read MACS2 narrowPeak file
+    # Columns: chr, start, end, name, score, strand, fold_change, pvalue, qvalue, summit_offset
+    np <- fread(narrowpeak_file, header = FALSE,
+                col.names = c("chr", "start", "end", "name", "score", "strand", 
+                              "fold_change", "pvalue", "qvalue", "summit_offset"))
+    
+    # Remove any track lines or invalid rows (alternative approach for older data.table)
+    if (nrow(np) > 0) {
+      np <- np[!grepl("^track", chr) & !is.na(chr) & chr != "" & !grepl("^#", chr)]
+      # Ensure numeric columns are properly converted
+      np$start <- as.integer(np$start)
+      np$end <- as.integer(np$end)
+      np$score <- as.numeric(np$score)
+      # Remove rows with invalid coordinates
+      np <- np[!is.na(start) & !is.na(end) & start >= 0 & end >= 0]
+    }
+    
+    cat("Read", nrow(np), "total peaks from narrowPeak file\n")
+    
+    # Convert from 0-based to 1-based coordinates BEFORE filtering
+    if (nrow(np) > 0) {
+      np$start <- as.integer(np$start) + 1L
+      np$end <- as.integer(np$end)
+    }
+    
+    cat("Gene chromosome:", gene_chr, "\n")
+    cat("Gene region:", gene_start, "-", gene_end, "\n")
+    if (nrow(np) > 0) {
+      cat("Peak chromosomes in file:", unique(np$chr), "\n")
+      cat("Normalized gene chr:", .normalize_chr(gene_chr), "\n")
+      cat("Normalized peak chrs:", unique(.normalize_chr(np$chr)), "\n")
+    }
+    
+    # Filter peaks overlapping with current gene (using normalized chromosome names)
+    np <- np[.normalize_chr(np$chr) == .normalize_chr(gene_chr) & np$start <= gene_end & np$end >= gene_start]
+    cat("Found", nrow(np), "peaks overlapping with gene", gene_id, "\n")
+    if (nrow(np)) {
+      # Clip to gene boundaries after coordinate conversion
+      np$start <- pmax(np$start, gene_start)
+      np$end   <- pmin(np$end, gene_end)
+      
+      # Calculate peak intensity (use score, but could also use fold_change or -log10(pvalue))
+      np$peak_intensity <- np$score
+      
+      all_peaks_df <- np[np$start <= np$end]  # Remove any invalid ranges after clipping
+      
+      cat("Found", nrow(all_peaks_df), "peaks overlapping with gene", gene_id, "\n")
+      if (nrow(all_peaks_df) > 0) {
+        cat("Peak coordinates after clipping:\n")
+        for (i in 1:min(5, nrow(all_peaks_df))) {
+          cat("  Peak", i, ": chr", all_peaks_df$chr[i], ":", all_peaks_df$start[i], "-", all_peaks_df$end[i], "\n")
+        }
+      }
+    } else {
+      all_peaks_df <- NULL
+    }
+  }
+
   # ---------- plots ----------
-  cov_title <- sprintf("%s  %s:%d-%d (%s)", gene_id, gene_chr, window_start, window_end, gene_strand)
+  # Update title to indicate if peaks are missing
+  if (has_peaks) {
+    cov_title <- sprintf("%s  %s:%d-%d (%s)", gene_id, gene_chr, window_start, window_end, gene_strand)
+  } else {
+    cov_title <- sprintf("%s  %s:%d-%d (%s) [NO PEAKS - GENE VIEW ONLY]", gene_id, gene_chr, window_start, window_end, gene_strand)
+  }
   win_highlight <- data.frame(xmin = window_start, xmax = window_end,
-                              ymin = 0.5, ymax = primer_lane + 0.5)
+                              ymin = 0.5, ymax = peaks_lane + 0.5)
 
   # Coverage plot (mode-dependent; percent uses TRUE max)
   p_cov <- ggplot()
@@ -223,7 +322,6 @@ plot_gene_with_window <- function(
     }
   }
   p_cov <- p_cov +
-    annotate("rect", xmin = window_start, xmax = window_end, ymin = -Inf, ymax = Inf, alpha = 0.12) +
     scale_x_continuous(limits = c(gene_start, gene_end)) +
     labs(x = NULL, title = cov_title, subtitle = qc_lab) +
     theme_bw(base_size = 11) +
@@ -231,13 +329,23 @@ plot_gene_with_window <- function(
           plot.subtitle = element_text(size = 9),
           axis.title.x = element_blank(),
           legend.position = "none")
+  
+  # Add peak highlight only if peaks are available
+  if (has_peaks) {
+    p_cov <- p_cov + annotate("rect", xmin = window_start, xmax = window_end, ymin = -Inf, ymax = Inf, alpha = 0.12)
+  }
 
   # Feature track: all isoforms + primer lane
-  feat <- ggplot() +
-    # window outline spanning all isoforms + primer lane
-    geom_rect(data = win_highlight,
-              aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
-              fill = "red", alpha = 0.18, inherit.aes = FALSE) +
+  feat <- ggplot()
+  
+  # Add window outline only if peaks are available
+  if (has_peaks) {
+    feat <- feat + geom_rect(data = win_highlight,
+                             aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
+                             fill = "red", alpha = 0.18, inherit.aes = FALSE)
+  }
+  
+  feat <- feat +
     # exons
     { if (nrow(exon_df))
         geom_rect(data = exon_df,
@@ -254,11 +362,24 @@ plot_gene_with_window <- function(
                      aes(x = xa, xend = xa_e, y = primer_lane + 0.2, yend = primer_lane + 0.2),
                      arrow = arrow(length = unit(3, "mm"), ends = "last"),
                      linewidth = 0.9) else NULL } +
+    # all MACS2 peaks as horizontal bars  
+    { if (!is.null(all_peaks_df) && nrow(all_peaks_df)) {
+        cat("Drawing", nrow(all_peaks_df), "peaks at y-level", peaks_lane, "\n")
+        cat("Y coordinates: ymin =", peaks_lane + 0.1, "ymax =", peaks_lane + 0.7, "\n")
+        cat("X-axis limits: gene_start =", gene_start, "gene_end =", gene_end, "\n")
+        for (i in 1:min(3, nrow(all_peaks_df))) {
+          cat("  Peak", i, "x-coords: xmin =", all_peaks_df$start[i], "xmax =", all_peaks_df$end[i], "\n")
+        }
+        geom_rect(data = all_peaks_df,
+                  aes(xmin = start, xmax = end, 
+                      ymin = peaks_lane + 0.1, ymax = peaks_lane + 0.7),
+                  fill = "darkred", alpha = 0.7, color = "black", linewidth = 0.2)
+      } else NULL } +
     scale_x_continuous(limits = c(gene_start, gene_end)) +
     scale_y_continuous(
-      limits = c(0.5, primer_lane + 0.5),
-      breaks = c(seq_along(valid_transcripts), primer_lane),
-      labels = c(valid_transcripts, "Primer")
+      limits = c(0.5, peaks_lane + 1.0),  # Increase upper limit to accommodate peak rectangles
+      breaks = c(seq_along(valid_transcripts), primer_lane, peaks_lane),
+      labels = c(valid_transcripts, "Primer", "All Peaks")
     ) +
     labs(x = sprintf("%s:%d-%d", gene_chr, gene_start, gene_end), y = NULL) +
     theme_bw(base_size = 11) +
@@ -268,9 +389,9 @@ plot_gene_with_window <- function(
 
   # Stack tracks
   if (requireNamespace("patchwork", quietly = TRUE)) {
-    patchwork::wrap_plots(p_cov, feat, ncol = 1, heights = c(3, 1.6))
+    patchwork::wrap_plots(p_cov, feat, ncol = 1, heights = c(3, 2))  # Increase feature track height
   } else if (requireNamespace("cowplot", quietly = TRUE)) {
-    cowplot::plot_grid(p_cov, feat, ncol = 1, rel_heights = c(3, 1.6))
+    cowplot::plot_grid(p_cov, feat, ncol = 1, rel_heights = c(3, 2))  # Increase feature track height
   } else {
     # fallback if patchwork/cowplot not installed
     list(coverage = p_cov, features = feat)
@@ -285,6 +406,7 @@ opt_list <- list(
   make_option("--peaks", type="character", default="peaks.tsv", help="peaks.tsv from your pipeline [default %default]"),
   make_option("--qc", type="character", default="qc_coverage_summary.tsv", help="QC table (optional) [default %default]"),
   make_option("--primer", type="character", default=NULL, help="Primer BED (optional)"),
+  make_option("--narrowpeak", type="character", default=NULL, help="MACS2 narrowPeak file to show all peaks (optional)"),
   make_option("--out", type="character", default=NULL, help="Output image path (PNG/PDF). If omitted, uses plot_<gene>.png"),
   make_option("--yaxis", type="character", default="percent",
               help="Y-axis mode: 'percent' (relative to TRUE BigWig peak), 'depth' (raw), or 'log10' (raw log10) [default %default]"),
@@ -306,6 +428,7 @@ plt <- plot_gene_with_window(
   peaks_tsv        = opt$peaks,
   primer_bed       = opt$primer,
   qc_tsv           = if (file.exists(opt$qc)) opt$qc else NULL,
+  narrowpeak_file  = opt$narrowpeak,
   yaxis_mode       = opt$yaxis,
   max_isoforms     = opt$max_isoforms,
   cov_target_points= as.integer(opt$cov_points)
@@ -315,8 +438,14 @@ outfile <- if (!is.null(opt$out)) opt$out else sprintf("plot_%s.png", opt$gene)
 ext <- tolower(tools::file_ext(outfile))
 
 if (inherits(plt, "list")) {
-  # no patchwork/cowplot; save coverage track only as a safe default
-  ggsave(outfile, plt$coverage, width = opt$width, height = opt$height, dpi = opt$dpi)
+  # fallback: use gridExtra to combine panels when patchwork/cowplot unavailable
+  if (requireNamespace("gridExtra", quietly = TRUE)) {
+    combined_plt <- gridExtra::grid.arrange(plt$coverage, plt$features, ncol = 1, heights = c(3, 2))
+    ggsave(outfile, combined_plt, width = opt$width, height = opt$height, dpi = opt$dpi)
+  } else {
+    warning("Neither patchwork, cowplot, nor gridExtra available. Saving coverage panel only.")
+    ggsave(outfile, plt$coverage, width = opt$width, height = opt$height, dpi = opt$dpi)
+  }
 } else {
   if (ext %in% c("pdf","svg")) {
     ggsave(outfile, plt, width = opt$width, height = opt$height, limitsize = FALSE)

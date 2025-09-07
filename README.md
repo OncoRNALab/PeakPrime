@@ -30,6 +30,11 @@ Why PeakPrime?
   - Primer3 settings file
   - Optional: Pre-built Bowtie2 transcriptome index
 
+## Install
+```bash
+git clone git@github.com:OncoRNALab/PeakPrime.git
+```
+
 ## Quick Start
 
 ## Example Usage
@@ -62,24 +67,10 @@ nextflow run main.nf \
   --outdir results/
 ```
 
-### With Transcriptome QC and Gene Name Mapping
-
-```bash
-# Using pre-built Bowtie2 index with gene name mapping (recommended)
-nextflow run main.nf \
-  --bam sample.bam \
-  --gtf annotations.gtf \
-  --genes gene_list.txt \
-  --primer3_settings primer3_settings.txt \
-  --transcriptome_index /path/to/transcriptome_index_prefix \
-  --transcriptome_fasta /path/to/transcriptome.fasta \
-  --max_primers_per_gene 5 \
-  --outdir results/
-```
-
 ### Complete Example with All Features
 
 ```bash
+# Using pre-built transcriptome Bowtie2 index with gene name mapping (recommended)
 nextflow run main.nf \
   --bam sample_rnaseq.bam \
   --gtf gencode.v44.annotation.gtf \
@@ -94,7 +85,7 @@ nextflow run main.nf \
   --trim_low_coverage_pct 5 \
   --trim_to_exon \
   --min_exonic_fraction 0.75 \
-  --transcriptome_index indexes/gencode_transcriptome \
+  --transcriptome_index transcriptome_index \
   --transcriptome_fasta gencode.v44.transcripts.fa \
   --max_primers_per_gene 3 \
   --outdir results_comprehensive/
@@ -107,11 +98,6 @@ To use transcriptome alignment QC, first build a Bowtie2 index from your transcr
 ```bash
 # Build Bowtie2 index (one-time setup)
 bowtie2-build transcriptome.fasta transcriptome_index
-
-# Then use the prefix in your pipeline
-nextflow run main.nf \
-  --transcriptome_index transcriptome_index \
-  [other parameters...]
 ```
 
 ## Parameters
@@ -264,12 +250,9 @@ Multiple trimming strategies ensure high-quality target regions:
 - **Quality Classification**: Flags windows that fail quality criteria
 
 ### Strand-Specific Primer Selection
-For cDNA amplification, the pipeline selects biologically appropriate primers based on correct orientation:
-
-- **Positive-strand genes**: Uses RIGHT primers (reverse complement of template matches mRNA)
-- **Negative-strand genes**: Uses LEFT primers (direct match of template matches mRNA) 
+For cDNA amplification, the pipeline selects biologically appropriate primers based on correct orientation: Uses LEFT primers (direct match of template matches mRNA) 
 - **Biological Logic**: Ensures primers match the mRNA sequence orientation for proper cDNA amplification
-- **Template Handling**: Genomic sequences are automatically extracted in proper strand orientation
+
 
 ### Transcriptome Alignment QC
 Fast Python-based quality control through transcriptome alignment:
@@ -304,9 +287,42 @@ Primers are classified based on transcriptome alignment patterns:
 
 The script supports multiple y-axis modes (percent, depth, log10), optional QC annotation, and customizable output size. It is designed for publication-quality figures and troubleshooting of primer selection.
 
+### Example usage
+
+```bash
+#bioconductor required
+Rscript ./bin/MakePlots_new.R \
+  --gene ENSG00000067191 \
+  --bw ./results/Class4_W20_pad140/Merged_S7_S12.unique.bw \
+  --gtf /data/gent/vo/000/gvo00027/resources/Ensembl_transcriptomes/Homo_sapiens/GRCh38/Homo_sapiens.GRCh38.109.chrIS_spikes_45S.gtf \
+  --peaks ./results/Class4_W20_pad140/peaks.tsv \
+  --qc ./results/Class4_W20_pad140/qc_coverage_summary.tsv \
+  --primer ./results/Class4_W20_pad140/primer_targets.bed \
+  --out ENSG00000067191_class4_pad140W20.png
+```
+
 #### Example Output
 
 ![Coverage and Isoform Plot Example](ENSG00000089009_prct_Class1.png)
+
+The plots now include an additional track showing **all MACS2-called peaks** within the gene span:
+- **Coverage track** (top): Shows RNA-seq coverage with highlighted selected peak window
+- **Isoform tracks** (middle): Gene structure with exons and introns for all isoforms
+- **Primer track**: Shows designed primer locations (if available)  
+- **All Peaks track** (bottom): **NEW!** Horizontal bars showing all MACS2 peaks colored by intensity
+
+To include all peaks in your plots, provide the MACS2 narrowPeak file:
+```bash
+nextflow run main.nf --makeplots \
+  --bw ./results/sample.bam.bw \
+  --gtf annotations.gtf \
+  --genes target_genes.txt \
+  --peaks_tsv ./results/peaks.tsv \
+  --qc_tsv ./results/qc_summary.tsv \
+  --primer ./results/primer_targets.bed \
+  --narrowpeak ./results/macs2_peaks/sample_peaks.narrowPeak \
+  --out ENSG00000067191_with_all_peaks.png
+```
 
 ---
 
