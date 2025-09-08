@@ -211,3 +211,22 @@ igvtools count ./testdata/Merged_S7_S12.unique.bam Merged_S7_S12.unique.bam.tdf 
 "low": "Quality-of-life or robustness improvements."
 }
 }
+
+
+#batch
+Completed at: 08-Sep-2025 16:04:13
+Duration    : 5m 26s
+CPU hours   : 0.1
+Succeeded   : 6
+
+#optimized
+Completed at: 08-Sep-2025 15:59:54
+Duration    : 5m 14s
+CPU hours   : 0.1
+Succeeded   : 6
+
+#original
+Completed at: 08-Sep-2025 16:06:32
+Duration    : 5m 22s
+CPU hours   : 0.1
+Succeeded   : 6

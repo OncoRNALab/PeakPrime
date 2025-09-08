@@ -66,6 +66,18 @@ nextflow run main.nf \
   -profile local
 ```
 
+### Use Second-Best Peaks
+```bash
+# Select second-best peaks instead of the best peaks per gene
+nextflow run main.nf \
+  --bam sample.bam \
+  --gtf annotations.gtf \
+  --genes gene_list.txt \
+  --peak_rank 2 \
+  --outdir results_second_best/ \
+  -profile local
+```
+
 ### Generate Visualization Plots
 ```bash
 # First run the main pipeline, then generate plots
@@ -95,6 +107,8 @@ nextflow run main.nf --makeplots \
 |-----------|---------|-------------|
 | `--macs2_pvalue_threshold` | 0.05 | P-value threshold for peak significance |
 | `--macs2_min_peak_score` | 0 | Minimum peak score threshold |
+| `--peak_selection_metric` | score | Metric for selecting best peak per gene: 'score' or 'qvalue' |
+| `--peak_rank` | 1 | Which ranked peak to select per gene: 1 for best, 2 for second-best, etc. |
 
 ### Primer Design Parameters
 | Parameter | Default | Description |
@@ -194,6 +208,22 @@ Rscript bin/MakePlots_new.R \
   --narrowpeak results/macs2_peaks/sample_peaks.narrowPeak \
   --out ENSG00000067191_with_peaks.png
 ```
+
+#### Sample Plot Output
+![Example Gene Visualization](plot_ENSG00000096384.png)
+
+*Example visualization showing RNA-seq coverage (top), gene structure with UTRs, primer locations, and all MACS2 peaks (bottom) for gene ENSG00000096384. The selected peak window is highlighted, and all detected peaks within the gene are shown as colored bars indicating their significance.*
+
+**Color Legend:**
+- **Coverage plot**: Blue area shows RNA-seq read coverage
+- **Gene structure**: 
+  - Gray bars: Full exonic regions (transcribed areas)
+  - Blue bars: CDS regions (coding sequences)  
+  - Light blue bars: 5' UTRs
+  - Orange bars: 3' UTRs
+- **Primers**: Red arrows indicate the primer direction
+- **MACS2 peaks**: Horizontal bars colored by peak score/significance (darker = higher significance)
+- **Selected window**: Yellow/highlighted region chosen for primer design
 
 ## 🔧 Quality Control Features
 

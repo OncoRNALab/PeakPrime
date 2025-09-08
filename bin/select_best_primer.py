@@ -3,9 +3,9 @@
 Select best primers from alignment reports.
 
 Rules used:
-- Prefer high-quality (MAPQ==255) alignments
-- Require that among MAPQ==255 alignments a primer maps to a single unique gene name
-- Require mismatches == 0 for those MAPQ==255 alignments
+- Require that a primer maps to a single unique gene name
+- Require mismatches == 0 for the alignments to that gene
+- Prefer primers with fewer total alignments (less cross-reactivity)
 
 Writes out 'best_primers.tsv' in the current working directory.
 """
@@ -25,13 +25,12 @@ def main():
     try:
         summary = pd.read_csv(args.summary, sep='\t', dtype=str)
     except Exception:
-                # fallback: use quick heuristic from report
-        out = report[(report.get('num_alignments', '0').astype(int) == 1) &
-                     (report.get('best_mapq', '0').astype(int) == 255)].copy()
-        # Remove alignment_quality from fallback output too
+        # fallback: use quick heuristic from report (unique alignments only)
+        out = report[report.get('num_alignments', '0').astype(int) == 1].copy()
+        # Remove alignment_quality from fallback output if present
         if 'alignment_quality' in out.columns:
             out = out.drop('alignment_quality', axis=1)
-        out.to_csv(args.out, sep='	', index=False)
+        out.to_csv(args.out, sep='\t', index=False)
         print(f'Wrote {args.out} (fallback quick filter)')
         return
 
@@ -45,8 +44,7 @@ def main():
                                   summary['gene_strand'].astype(str))
         else:
             print('detailed summary missing required columns for primer_id construction; falling back to report heuristic', file=sys.stderr)
-            out = report[(report.get('num_alignments', '0').astype(int) == 1) &
-                         (report.get('best_mapq', '0').astype(int) == 255)].copy()
+            out = report[report.get('num_alignments', '0').astype(int) == 1].copy()
             # Remove alignment_quality from fallback output
             if 'alignment_quality' in out.columns:
                 out = out.drop('alignment_quality', axis=1)
@@ -54,10 +52,9 @@ def main():
             print(f'Wrote {args.out} (fallback quick filter)')
             return
 
-    # Filter for perfect matches and high mapping quality first
-    summary['alignment_mapq'] = pd.to_numeric(summary.get('alignment_mapq', 0), errors='coerce').fillna(0).astype(int)
+    # Filter for perfect matches (zero mismatches) - no MAPQ filtering needed
     summary['mismatches'] = pd.to_numeric(summary.get('mismatches', 9999), errors='coerce').fillna(9999).astype(int)
-    filtered = summary[(summary['alignment_mapq'] == 255) & (summary['mismatches'] == 0)].copy()
+    filtered = summary[summary['mismatches'] == 0].copy()
 
     selected = []
     for pid, group in filtered.groupby('primer_id'):
@@ -69,14 +66,19 @@ def main():
                 row = rpt.iloc[0].to_dict()
                 if 'alignment_quality' in row:
                     del row['alignment_quality']
+                if 'best_mapq' in row:
+                    del row['best_mapq']  # Remove meaningless MAPQ
                 row['aligned_gene_name'] = genes[0]
-                row['hq_alignments'] = len(group)
                 row['zero_mismatch_alignments'] = len(group)
                 selected.append(row)
 
     if not selected:
         # write empty with headers to be predictable
-        cols = list(report.columns) + ['aligned_gene_name', 'hq_alignments']
+        cols = list(report.columns) + ['aligned_gene_name', 'zero_mismatch_alignments']
+        if 'alignment_quality' in cols:
+            cols.remove('alignment_quality')
+        if 'best_mapq' in cols:
+            cols.remove('best_mapq')
         pd.DataFrame(columns=cols).to_csv(args.out, sep='\t', index=False)
         print(f'Wrote {args.out} (no strict matches found)')
         return

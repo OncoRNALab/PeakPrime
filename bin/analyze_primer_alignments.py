@@ -211,91 +211,65 @@ def analyze_alignments(alignment_bam, primers_tsv, transcriptome_fasta=None,
     report = primers.copy()
     report['num_alignments'] = report['primer_id'].map(alignment_counts).fillna(0).astype(int)
     
-    # Add alignment quality flags (same logic as R script)
-    report['alignment_quality'] = 'FAIL'
-    report.loc[report['num_alignments'] == 1, 'alignment_quality'] = 'PERFECT'  # Unique alignment
-    report.loc[(report['num_alignments'] > 1) & (report['num_alignments'] <= 5), 'alignment_quality'] = 'GOOD'
-    report.loc[(report['num_alignments'] > 5) & (report['num_alignments'] <= 20), 'alignment_quality'] = 'MODERATE'
-    report.loc[report['num_alignments'] > 20, 'alignment_quality'] = 'POOR'
-    
-    # Add best MAPQ score for each primer
-    if not alignment_df.empty:
-        best_mapq = alignment_df.groupby('primer_id')['mapq'].max().to_dict()
-        report['best_mapq'] = report['primer_id'].map(best_mapq).fillna(0).astype(int)
-    else:
-        report['best_mapq'] = 0
-    
     # Write report
     report.to_csv(out_report, sep='\t', index=False)
     print(f"Alignment report written to: {out_report}")
     
-    # Create detailed alignment summary (filtered for high-quality alignments)
+    # Create detailed alignment summary (all alignments)
     print("Creating detailed alignment summary...")
     
     if not alignment_df.empty:
-        # Filter for high-quality alignments only (MAPQ = 255)
-        high_quality_alignments = alignment_df[alignment_df['mapq'] == 255].copy()
+        # Use all alignments since MAPQ is meaningless with bowtie2 -a
+        print(f"Processing {len(alignment_df)} total alignments")
         
-        if not high_quality_alignments.empty:
-            print(f"Keeping {len(high_quality_alignments)} high-quality alignments (MAPQ=255) out of {len(alignment_df)} total alignments")
-            
-            # Merge with primer information
-            primer_cols = ['primer_id', 'gene_id', 'primer_index', 'primer_type', 'primer_sequence', 'gene_strand']
-            detailed_summary = high_quality_alignments.merge(
-                primers[primer_cols], 
-                on='primer_id', 
-                how='left',
-                suffixes=('_align', '_primer')
-            )
-            
-            # Use primer gene_id and gene_strand if alignment versions are missing
-            detailed_summary['gene_id'] = detailed_summary['gene_id_primer'].fillna(detailed_summary['gene_id_align'])
-            detailed_summary['gene_strand'] = detailed_summary['gene_strand_primer'].fillna(detailed_summary['gene_strand_align'])
-            
-            # Select and rename columns
-            detailed_summary = detailed_summary.rename(columns={
-                'transcript_id': 'aligned_transcript',
-                'gene_name': 'aligned_gene_name',
-                'direction': 'alignment_strand',
-                'mapq': 'alignment_mapq'
-            })
-            
-            # Reorder columns
-            output_columns = [
-                'gene_id', 'primer_index', 'primer_type', 'primer_sequence', 'gene_strand',
-                'aligned_transcript', 'aligned_gene_name', 'alignment_start', 'alignment_end',
-                'alignment_length', 'alignment_strand', 'alignment_mapq', 'mismatches', 
-                'distance_to_end', 'transcript_length'
-            ]
-            
-            # Debug: check which columns are available
-            available_columns = detailed_summary.columns.tolist()
-            missing_columns = [col for col in output_columns if col not in available_columns]
-            if missing_columns:
-                print(f"Warning: Missing columns: {missing_columns}")
-                print(f"Available columns: {available_columns}")
-                # Use only available columns
-                output_columns = [col for col in output_columns if col in available_columns]
-            
-            detailed_summary = detailed_summary[output_columns]
-            
-            # Sort by gene, primer index, and MAPQ (best alignments first)
-            detailed_summary = detailed_summary.sort_values(['gene_id', 'primer_index', 'alignment_mapq'], 
-                                                          ascending=[True, True, False])
-            
-        else:
-            print("No high-quality alignments (MAPQ=255) found")
-            detailed_summary = pd.DataFrame(columns=[
-                'gene_id', 'primer_index', 'primer_type', 'primer_sequence', 'gene_strand',
-                'aligned_transcript', 'aligned_gene_name', 'alignment_start', 'alignment_end',
-                'alignment_length', 'alignment_strand', 'alignment_mapq', 'mismatches',
-                'distance_to_end', 'transcript_length'
-            ])
+        # Merge with primer information
+        primer_cols = ['primer_id', 'gene_id', 'primer_index', 'primer_type', 'primer_sequence', 'gene_strand']
+        detailed_summary = alignment_df.merge(
+            primers[primer_cols], 
+            on='primer_id', 
+            how='left',
+            suffixes=('_align', '_primer')
+        )
+        
+        # Use primer gene_id and gene_strand if alignment versions are missing
+        detailed_summary['gene_id'] = detailed_summary['gene_id_primer'].fillna(detailed_summary['gene_id_align'])
+        detailed_summary['gene_strand'] = detailed_summary['gene_strand_primer'].fillna(detailed_summary['gene_strand_align'])
+        
+        # Select and rename columns (remove MAPQ references)
+        detailed_summary = detailed_summary.rename(columns={
+            'transcript_id': 'aligned_transcript',
+            'gene_name': 'aligned_gene_name',
+            'direction': 'alignment_strand'
+        })
+        
+        # Reorder columns (remove alignment_mapq)
+        output_columns = [
+            'gene_id', 'primer_index', 'primer_type', 'primer_sequence', 'gene_strand',
+            'aligned_transcript', 'aligned_gene_name', 'alignment_start', 'alignment_end',
+            'alignment_length', 'alignment_strand', 'mismatches', 
+            'distance_to_end', 'transcript_length'
+        ]
+        
+        # Debug: check which columns are available
+        available_columns = detailed_summary.columns.tolist()
+        missing_columns = [col for col in output_columns if col not in available_columns]
+        if missing_columns:
+            print(f"Warning: Missing columns: {missing_columns}")
+            print(f"Available columns: {available_columns}")
+            # Use only available columns
+            output_columns = [col for col in output_columns if col in available_columns]
+        
+        detailed_summary = detailed_summary[output_columns]
+        
+        # Sort by gene, primer index, and number of mismatches (best alignments first)
+        detailed_summary = detailed_summary.sort_values(['gene_id', 'primer_index', 'mismatches'], 
+                                                      ascending=[True, True, True])
+        
     else:
         detailed_summary = pd.DataFrame(columns=[
             'gene_id', 'primer_index', 'primer_type', 'primer_sequence', 'gene_strand',
             'aligned_transcript', 'aligned_gene_name', 'alignment_start', 'alignment_end',
-            'alignment_length', 'alignment_strand', 'alignment_mapq', 'mismatches',
+            'alignment_length', 'alignment_strand', 'mismatches',
             'distance_to_end', 'transcript_length'
         ])
     
@@ -303,14 +277,9 @@ def analyze_alignments(alignment_bam, primers_tsv, transcriptome_fasta=None,
     detailed_summary.to_csv(out_summary, sep='\t', index=False)
     print(f"Detailed alignment summary written to: {out_summary}")
     
-    # Print summary statistics (matching R script output)
+    # Print summary statistics
     print("\n=== PRIMER ALIGNMENT SUMMARY ===")
     print(f"Total primers analyzed: {len(report)}")
-    print("Quality distribution:")
-    quality_counts = report['alignment_quality'].value_counts()
-    for qual in ['PERFECT', 'GOOD', 'MODERATE', 'POOR', 'FAIL']:
-        if qual in quality_counts:
-            print(f"  {qual}: {quality_counts[qual]}")
     
     print("\nAlignment count distribution:")
     alignment_bins = pd.cut(report['num_alignments'], 
@@ -320,27 +289,27 @@ def analyze_alignments(alignment_bam, primers_tsv, transcriptome_fasta=None,
     for bin_name in alignment_summary.index:
         print(f"  {bin_name}: {alignment_summary[bin_name]}")
     
-    # Identify problematic primers
-    problematic = report[report['alignment_quality'].isin(['POOR', 'FAIL'])]
-    if not problematic.empty:
-        print("\n=== PROBLEMATIC PRIMERS ===")
-        print("Primers with poor/no alignment (consider excluding):")
-        for i in range(min(10, len(problematic))):
-            p = problematic.iloc[i]
+    # Identify primers with many alignments (potential cross-reactivity)
+    many_alignments = report[report['num_alignments'] > 20]
+    if not many_alignments.empty:
+        print("\n=== PRIMERS WITH MANY ALIGNMENTS ===")
+        print("Primers with >20 hits (potential cross-reactivity):")
+        for i in range(min(10, len(many_alignments))):
+            p = many_alignments.iloc[i]
             print(f"  {p['gene_id']} primer {p['primer_index']} ({p['primer_type']}) - {p['num_alignments']} hits")
-        if len(problematic) > 10:
-            print(f"  ... and {len(problematic) - 10} more (see full report)")
+        if len(many_alignments) > 10:
+            print(f"  ... and {len(many_alignments) - 10} more (see full report)")
     
-    # Identify best primers
-    best_primers = report[report['alignment_quality'] == 'PERFECT']
-    if not best_primers.empty:
-        print("\n=== BEST PRIMERS (PERFECT ALIGNMENT) ===")
-        print("Primers with unique transcriptome hits:")
-        for i in range(min(5, len(best_primers))):
-            p = best_primers.iloc[i]
-            print(f"  {p['gene_id']} primer {p['primer_index']} ({p['primer_type']}) - MAPQ: {p['best_mapq']}")
-        if len(best_primers) > 5:
-            print(f"  ... and {len(best_primers) - 5} more perfect primers")
+    # Identify primers with unique alignments (ideal case)
+    unique_primers = report[report['num_alignments'] == 1]
+    if not unique_primers.empty:
+        print("\n=== PRIMERS WITH UNIQUE ALIGNMENTS ===")
+        print("Primers with exactly 1 transcriptome hit:")
+        for i in range(min(5, len(unique_primers))):
+            p = unique_primers.iloc[i]
+            print(f"  {p['gene_id']} primer {p['primer_index']} ({p['primer_type']})")
+        if len(unique_primers) > 5:
+            print(f"  ... and {len(unique_primers) - 5} more unique primers")
     
     print("\nAlignment analysis complete")
 

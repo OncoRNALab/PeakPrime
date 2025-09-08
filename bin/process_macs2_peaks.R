@@ -24,6 +24,8 @@ opt_list <- list(
   make_option("--fasta", type="character", default="NO_FILE", help="Genome FASTA file"),
   make_option("--pvalue_threshold", type="double", default=0.05, help="p-value threshold for peak filtering"),
   make_option("--min_peak_score", type="double", default=0, help="Minimum peak score threshold"),
+  make_option("--peak_selection_metric", type="character", default="score", help="Metric for selecting best peak per gene: 'score' or 'qvalue'"),
+  make_option("--peak_rank", type="integer", default=1, help="Which ranked peak to select per gene: 1 for best, 2 for second-best, etc."),
   make_option("--pad", type="integer", default=100, help="[UNUSED] Legacy parameter - target regions now use exact peak boundaries"),
   make_option("--min_exonic_fraction", type="character", default="NA", help="Minimum exonic fraction (or NA to disable)"),
   make_option("--trim_to_exon", type="character", default="false", help="Trim peaks to exon boundaries"),
@@ -38,6 +40,20 @@ opt <- parse_args(OptionParser(option_list = opt_list))
 # Parse parameters
 min_exonic_fraction <- if(opt$min_exonic_fraction == "NA") NA_real_ else as.numeric(opt$min_exonic_fraction)
 trim_to_exon <- opt$trim_to_exon == "true"
+
+# Validate peak selection metric
+valid_metrics <- c("score", "qvalue")
+if (!opt$peak_selection_metric %in% valid_metrics) {
+  stop("Invalid peak_selection_metric: '", opt$peak_selection_metric, "'. Must be one of: ", paste(valid_metrics, collapse = ", "))
+}
+
+# Validate peak rank
+if (opt$peak_rank < 1 || !is.integer(opt$peak_rank)) {
+  stop("Invalid peak_rank: '", opt$peak_rank, "'. Must be a positive integer (1 for best peak, 2 for second-best, etc.)")
+}
+
+cat("Peak selection metric:", opt$peak_selection_metric, "\n")
+cat("Peak rank to select:", opt$peak_rank, "\n")
 
 cat("Loading annotation and gene list...\n")
 
@@ -56,10 +72,16 @@ ex_merged <- endoapply(ex_by_gene, function(x) reduce(trim(x)))
 # Initialize comprehensive QC tracking for ALL target genes
 all_genes_qc <- data.frame(
   gene_id = target_genes,
+  # Gene boundaries (entire gene span)
   gene_chr = as.character(seqnames(g_target))[match(target_genes, names(g_target))],
   gene_start = start(g_target)[match(target_genes, names(g_target))],
   gene_end = end(g_target)[match(target_genes, names(g_target))],
   gene_strand = as.character(strand(g_target))[match(target_genes, names(g_target))],
+  # Selected peak coordinates (actual target region for primers)
+  peak_chr = NA_character_,
+  peak_start = NA_integer_,
+  peak_end = NA_integer_,
+  peak_strand = NA_character_,
   has_macs2_peaks = FALSE,
   has_significant_peaks = FALSE,
   has_overlapping_peaks = FALSE,
@@ -194,14 +216,51 @@ all_genes_qc$failure_reason[failed_at_overlap] <- "Significant peaks found but n
 
 cat("Found", nrow(peak_gene_map), "peak-gene overlaps for", length(unique(peak_gene_map$gene_id)), "genes\n")
 
-# Select best peak per gene (highest score)
-best_peaks <- peak_gene_map[order(peak_gene_map$gene_id, -peaks_gr[peak_gene_map$peak_idx]$score), ]
-best_peaks <- best_peaks[!duplicated(best_peaks$gene_id), ]
+# Select peak by rank per gene based on chosen metric
+if (opt$peak_selection_metric == "score") {
+  # Higher score is better (descending order)
+  ordered_peaks <- peak_gene_map[order(peak_gene_map$gene_id, -peaks_gr[peak_gene_map$peak_idx]$score), ]
+  cat("Selecting peaks by highest MACS2 score (rank ", opt$peak_rank, ")\n")
+} else if (opt$peak_selection_metric == "qvalue") {
+  # Higher -log10(qvalue) is better (descending order) - MACS2 stores -log10(q-value)
+  ordered_peaks <- peak_gene_map[order(peak_gene_map$gene_id, -peaks_gr[peak_gene_map$peak_idx]$qvalue), ]
+  cat("Selecting peaks by highest -log10(q-value) (rank ", opt$peak_rank, ")\n")
+}
 
-# Track which genes get selected as best peaks
+# Select the peak at the specified rank for each gene
+selected_peaks <- data.frame()
+genes_without_rank <- character(0)
+
+for(gene in unique(ordered_peaks$gene_id)) {
+  gene_peaks <- ordered_peaks[ordered_peaks$gene_id == gene, ]
+  
+  if(nrow(gene_peaks) >= opt$peak_rank) {
+    # Select the peak at the specified rank
+    selected_peaks <- rbind(selected_peaks, gene_peaks[opt$peak_rank, ])
+  } else {
+    # Not enough peaks for this gene at the requested rank
+    genes_without_rank <- c(genes_without_rank, gene)
+    cat("Warning: Gene", gene, "has only", nrow(gene_peaks), "peak(s), cannot select rank", opt$peak_rank, "\n")
+  }
+}
+
+# Track genes that couldn't get the requested rank
+if(length(genes_without_rank) > 0) {
+  cat("Genes without sufficient peaks for rank", opt$peak_rank, ":", length(genes_without_rank), "\n")
+  # Update QC for genes without sufficient peaks
+  all_genes_qc$failure_reason[all_genes_qc$gene_id %in% genes_without_rank] <- 
+    paste0("Insufficient peaks for rank ", opt$peak_rank, " (only ", 
+           sapply(genes_without_rank, function(g) sum(ordered_peaks$gene_id == g)), 
+           " peak(s) available)")
+}
+
+best_peaks <- selected_peaks
+
+# Track which genes get selected peaks
 genes_with_best_peaks <- unique(best_peaks$gene_id)
 all_genes_qc$is_best_peak[all_genes_qc$gene_id %in% genes_with_best_peaks] <- TRUE
-all_genes_qc$failure_reason[all_genes_qc$gene_id %in% genes_with_best_peaks] <- "Selected as best peak"
+rank_description <- if(opt$peak_rank == 1) "best peak" else if(opt$peak_rank == 2) "second-best peak" else paste0(opt$peak_rank, "th-ranked peak")
+all_genes_qc$failure_reason[all_genes_qc$gene_id %in% genes_with_best_peaks] <- paste0("Selected as ", rank_description, " (by ", opt$peak_selection_metric, ")")
 
 # Store best peak statistics
 for(i in 1:nrow(best_peaks)) {
@@ -212,6 +271,12 @@ for(i in 1:nrow(best_peaks)) {
   all_genes_qc$best_peak_score[qc_idx] <- peaks_gr[peak_idx]$score
   all_genes_qc$best_peak_pvalue[qc_idx] <- peaks_gr[peak_idx]$pvalue
   all_genes_qc$best_peak_qvalue[qc_idx] <- peaks_gr[peak_idx]$qvalue
+  
+  # Store selected peak coordinates (before any trimming)
+  all_genes_qc$peak_chr[qc_idx] <- as.character(seqnames(peaks_gr[peak_idx]))
+  all_genes_qc$peak_start[qc_idx] <- start(peaks_gr[peak_idx])
+  all_genes_qc$peak_end[qc_idx] <- end(peaks_gr[peak_idx])
+  all_genes_qc$peak_strand[qc_idx] <- as.character(strand(peaks_gr[peak_idx]))
 }
 
 cat("Selected", nrow(best_peaks), "best peaks (one per gene)\n")
@@ -335,6 +400,18 @@ if(!is.na(min_exonic_fraction)) {
 # Mark final selections
 all_genes_qc$final_selection[all_genes_qc$gene_id %in% target_regions$gene_id] <- TRUE
 
+# Update final selected peak coordinates (after any trimming/filtering)
+for(i in 1:length(target_regions)) {
+  gene_id <- target_regions$gene_id[i]
+  qc_idx <- which(all_genes_qc$gene_id == gene_id)
+  
+  # Update with final coordinates (may be trimmed)
+  all_genes_qc$peak_chr[qc_idx] <- as.character(seqnames(target_regions[i]))
+  all_genes_qc$peak_start[qc_idx] <- start(target_regions[i])
+  all_genes_qc$peak_end[qc_idx] <- end(target_regions[i])
+  all_genes_qc$peak_strand[qc_idx] <- as.character(strand(target_regions[i]))
+}
+
 cat("Extracting sequences...\n")
 
 # Extract sequences
@@ -383,7 +460,7 @@ peaks_df <- data.frame(
   peak_qvalue = target_regions$peak_qvalue,
   exonic_fraction = target_regions$exonic_fraction,
   trimmed_to_exon = target_regions$trimmed_to_exon,
-  strategy = "macs2_peak_boundaries",
+  strategy = paste0("macs2_peak_boundaries_by_", opt$peak_selection_metric),
   stringsAsFactors = FALSE
 )
 

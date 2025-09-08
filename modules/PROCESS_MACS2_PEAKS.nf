@@ -25,6 +25,8 @@ process PROCESS_MACS2_PEAKS {
         --fasta ${fasta_file} \\
         --pvalue_threshold ${params.macs2_pvalue_threshold ?: 0.05} \\
         --min_peak_score ${params.macs2_min_peak_score ?: 0} \\
+        --peak_selection_metric ${params.peak_selection_metric ?: 'score'} \\
+        --peak_rank ${params.peak_rank ?: 1} \\
         --pad ${params.pad ?: 100} \\
         --min_exonic_fraction ${params.min_exonic_fraction ?: 'NA'} \\
         --trim_to_exon ${params.trim_to_exon ? 'true' : 'false'} \\

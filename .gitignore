@@ -52,6 +52,7 @@ slurm-*.out
 *.sbatch
 *.pbs
 job*.sh
+*.sh
 
 # Log files
 *.log

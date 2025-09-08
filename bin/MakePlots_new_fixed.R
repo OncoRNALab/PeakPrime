@@ -68,16 +68,10 @@ plot_gene_with_window <- function(
   tcol <- .pick_tx_col(gtf_gr)
 
   is_exon <- gtf_gr$type %in% "exon"
-  is_cds <- gtf_gr$type %in% "CDS"
   is_utr <- gtf_gr$type %in% c("three_prime_utr", "five_prime_utr")
-  
   gene_mask <- is_exon & (as.character(mcols(gtf_gr)[[gcol]]) == gene_id)
   gene_exons_all <- gtf_gr[gene_mask]
   if (!length(gene_exons_all)) stop(sprintf("Gene '%s' not found in GTF (column %s).", gene_id, gcol))
-  
-  # Get CDS regions for this gene (coding sequences only)
-  cds_mask <- is_cds & (as.character(mcols(gtf_gr)[[gcol]]) == gene_id)
-  gene_cds_all <- gtf_gr[cds_mask]
   
   # Also get UTR regions for this gene
   utr_mask <- is_utr & (as.character(mcols(gtf_gr)[[gcol]]) == gene_id)
@@ -90,13 +84,7 @@ plot_gene_with_window <- function(
   gene_start  <- min(start(gene_exons))
   gene_end    <- max(end(gene_exons))
   
-  # Filter CDS and UTRs to same chromosome/strand
-  if (length(gene_cds_all)) {
-    gene_cds <- gene_cds_all[seqnames(gene_cds_all) == gene_chr & strand(gene_cds_all) == gene_strand]
-  } else {
-    gene_cds <- GRanges()
-  }
-  
+  # Filter UTRs to same chromosome/strand and expand gene boundaries if needed
   if (length(gene_utrs_all)) {
     gene_utrs <- gene_utrs_all[seqnames(gene_utrs_all) == gene_chr & strand(gene_utrs_all) == gene_strand]
     if (length(gene_utrs)) {
@@ -164,7 +152,6 @@ plot_gene_with_window <- function(
   }
 
   exon_df <- data.table()
-  cds_df <- data.table()
   intron_df <- data.table()
   utr_df <- data.table()
 
@@ -172,25 +159,11 @@ plot_gene_with_window <- function(
     tx_exons <- gene_exons[as.character(mcols(gene_exons)[[tcol]]) == tx]
     if (!length(tx_exons)) next
     tx_exons <- tx_exons[order(start(tx_exons))]
-    
-    # Add full exons as light gray background (complete transcribed regions)
     exon_df <- rbind(exon_df, data.table(
       transcript = tx,
       xmin = as.integer(start(tx_exons)),
       xmax = as.integer(end(tx_exons))
     ))
-    
-    # Add CDS regions for this transcript (coding sequences as main blue bars)
-    if (length(gene_cds)) {
-      tx_cds <- gene_cds[as.character(mcols(gene_cds)[[tcol]]) == tx]
-      if (length(tx_cds)) {
-        cds_df <- rbind(cds_df, data.table(
-          transcript = tx,
-          xmin = as.integer(start(tx_cds)),
-          xmax = as.integer(end(tx_cds))
-        ))
-      }
-    }
     
     # Add UTRs for this transcript
     if (length(gene_utrs)) {
@@ -223,7 +196,6 @@ plot_gene_with_window <- function(
     tx_order <- transcripts_all
   }
   exon_df[,  y := match(transcript, tx_order)]
-  cds_df[,   y := match(transcript, tx_order)]
   intron_df[, y := match(transcript, tx_order)]
   utr_df[, y := match(transcript, tx_order)]
   valid_transcripts <- tx_order
@@ -409,19 +381,14 @@ plot_gene_with_window <- function(
   }
   
   feat <- feat +
-    # Full exons as light gray background (transcribed regions)
+    # exons (standard height)
     { if (nrow(exon_df))
         geom_rect(data = exon_df,
                   aes(xmin = xmin, xmax = xmax, ymin = y, ymax = y + 0.8),
-                  fill = "lightgray", alpha = 0.4) else NULL } +
-    # CDS regions as main blue bars (coding sequences) - on top of gray
-    { if (nrow(cds_df))
-        geom_rect(data = cds_df,
-                  aes(xmin = xmin, xmax = xmax, ymin = y + 0.1, ymax = y + 0.7),
-                  fill = "steelblue", alpha = 0.8) else NULL } +
-    # UTRs (on top of gray background, narrower than CDS)
+                  fill = "steelblue", alpha = 0.35) else NULL } +
+    # UTRs (narrower height - centered on transcript line)
     { if (nrow(utr_df)) {
-        # 5' UTRs in light blue, 3' UTRs in orange
+        # 5' UTRs in lighter blue, 3' UTRs in orange
         utr_5prime <- utr_df[utr_type == "five_prime_utr"]
         utr_3prime <- utr_df[utr_type == "three_prime_utr"]
         
@@ -429,11 +396,11 @@ plot_gene_with_window <- function(
           if (nrow(utr_5prime))
             geom_rect(data = utr_5prime,
                       aes(xmin = xmin, xmax = xmax, ymin = y + 0.25, ymax = y + 0.55),
-                      fill = "lightblue", alpha = 0.9, color = "darkblue", linewidth = 0.3),
+                      fill = "lightblue", alpha = 0.7, color = "darkblue", linewidth = 0.3),
           if (nrow(utr_3prime))
             geom_rect(data = utr_3prime,
                       aes(xmin = xmin, xmax = xmax, ymin = y + 0.25, ymax = y + 0.55),
-                      fill = "orange", alpha = 0.9, color = "darkorange", linewidth = 0.3)
+                      fill = "orange", alpha = 0.7, color = "darkorange", linewidth = 0.3)
         )
       } else NULL } +
     # introns

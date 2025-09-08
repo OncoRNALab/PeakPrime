@@ -118,8 +118,8 @@ bam_file <- BamFile(opt$alignment_bam)
 
 # Try to read alignments with query names
 tryCatch({
-  # Use scanBam to get both alignments and query names
-  param <- ScanBamParam(what = c("qname", "rname", "pos", "qwidth", "strand", "mapq"))
+  # Use scanBam to get alignments (exclude MAPQ since it's meaningless with -a flag)
+  param <- ScanBamParam(what = c("qname", "rname", "pos", "qwidth", "strand"))
   bam_data <- scanBam(bam_file, param = param)[[1]]
   
   cat("Read", length(bam_data$qname), "alignments from BAM file\n")
@@ -134,7 +134,6 @@ tryCatch({
       end = integer(0),
       width = integer(0),
       strand = character(0),
-      mapq = integer(0),
       stringsAsFactors = FALSE
     )
   } else {
@@ -146,7 +145,6 @@ tryCatch({
       end = bam_data$pos + bam_data$qwidth - 1,
       width = bam_data$qwidth,
       strand = as.character(bam_data$strand),
-      mapq = ifelse(is.na(bam_data$mapq), 255, bam_data$mapq),
       stringsAsFactors = FALSE
     )
     
@@ -171,7 +169,6 @@ tryCatch({
       end = integer(0),
       width = integer(0),
       strand = character(0),
-      mapq = integer(0),
       stringsAsFactors = FALSE
     )
   } else {
@@ -188,7 +185,6 @@ tryCatch({
       end = end(alignments),
       width = width(alignments),
       strand = as.character(strand(alignments)),
-      mapq = rep(255, length(alignments)),  # Default MAPQ
       stringsAsFactors = FALSE
     )
   }
@@ -212,44 +208,18 @@ report <- data.frame(
 # Replace NA with 0 for primers with no alignments
 report$num_alignments[is.na(report$num_alignments)] <- 0
 
-# Add alignment quality flags
-report$alignment_quality <- "FAIL"
-report$alignment_quality[report$num_alignments == 1] <- "PERFECT"  # Unique alignment
-report$alignment_quality[report$num_alignments > 1 & report$num_alignments <= 5] <- "GOOD"     # Few alignments
-report$alignment_quality[report$num_alignments > 5 & report$num_alignments <= 20] <- "MODERATE" # Some cross-reactivity
-report$alignment_quality[report$num_alignments > 20] <- "POOR"    # High cross-reactivity
-
-# Add best alignment details for each primer
-if (nrow(alignment_df) > 0 && "mapq" %in% colnames(alignment_df)) {
-  best_alignments <- aggregate(mapq ~ primer_id, data = alignment_df, FUN = max, na.rm = TRUE)
-  names(best_alignments)[2] <- "best_mapq"
-  
-  report <- merge(report, best_alignments, by = "primer_id", all.x = TRUE)
-  report$best_mapq[is.na(report$best_mapq)] <- 0
-} else {
-  # No alignment data available, set default values
-  report$best_mapq <- 0
-}
-
-# Write report
+# Write report (no alignment quality or MAPQ columns)
 write.table(report, opt$out_report, sep = "\t", quote = FALSE, row.names = FALSE)
 
 # Create detailed alignment summary (gene, primer, strand, transcript alignments)
 if (nrow(alignment_df) > 0) {
-  # Filter for high-quality alignments only (MAPQ = 255)
-  high_quality_alignments <- alignment_df[alignment_df$mapq == 255, ]
+  # Use all alignments since MAPQ is meaningless with bowtie2 -a
+  cat("Processing", nrow(alignment_df), "total alignments\n")
   
-  if (nrow(high_quality_alignments) > 0) {
-    cat("Keeping", nrow(high_quality_alignments), "high-quality alignments (MAPQ=255) out of", nrow(alignment_df), "total alignments\n")
-    
-    # Merge alignment data with primer information
-    detailed_summary <- merge(high_quality_alignments, primers[, c("primer_id", "gene_id", "primer_index", 
-                                                         "primer_type", "primer_sequence", "gene_strand")], 
-                             by = "primer_id", all.x = TRUE)
-  } else {
-    cat("No high-quality alignments (MAPQ=255) found\n")
-    detailed_summary <- data.frame()
-  }
+  # Merge alignment data with primer information
+  detailed_summary <- merge(alignment_df, primers[, c("primer_id", "gene_id", "primer_index", 
+                                                       "primer_type", "primer_sequence", "gene_strand")], 
+                           by = "primer_id", all.x = TRUE)
   
   if (nrow(detailed_summary) > 0) {
     # Add gene names from transcriptome mapping
@@ -263,16 +233,15 @@ if (nrow(alignment_df) > 0) {
       detailed_summary$aligned_gene_name <- "Unknown"
     }
     
-    # Reorder columns for better readability
+    # Reorder columns for better readability (remove MAPQ)
     detailed_summary <- detailed_summary[, c("gene_id", "primer_index", "primer_type", 
                                             "primer_sequence", "gene_strand", "target", 
                                             "aligned_gene_name", "start", "end", "width", 
-                                            "strand", "mapq")]
+                                            "strand")]
     
-    # Sort by gene, primer index, and MAPQ (best alignments first)
+    # Sort by gene, primer index, and number of mismatches (best alignments first)
     detailed_summary <- detailed_summary[order(detailed_summary$gene_id, 
-                                              detailed_summary$primer_index, 
-                                              -detailed_summary$mapq), ]
+                                              detailed_summary$primer_index), ]
     
     # Rename columns for clarity
     names(detailed_summary)[names(detailed_summary) == "target"] <- "aligned_transcript"
@@ -280,12 +249,11 @@ if (nrow(alignment_df) > 0) {
     names(detailed_summary)[names(detailed_summary) == "end"] <- "alignment_end"
     names(detailed_summary)[names(detailed_summary) == "width"] <- "alignment_length"
     names(detailed_summary)[names(detailed_summary) == "strand"] <- "alignment_strand"
-    names(detailed_summary)[names(detailed_summary) == "mapq"] <- "alignment_mapq"
     
     # Write detailed summary
     write.table(detailed_summary, opt$out_summary, sep = "\t", quote = FALSE, row.names = FALSE)
     
-    cat("Detailed alignment summary (MAPQ=255 only) written to:", opt$out_summary, "\n")
+    cat("Detailed alignment summary written to:", opt$out_summary, "\n")
   } else {
     # Create empty detailed summary file  
     empty_summary <- data.frame(
@@ -299,8 +267,7 @@ if (nrow(alignment_df) > 0) {
       alignment_start = integer(0),
       alignment_end = integer(0),
       alignment_length = integer(0),
-      alignment_strand = character(0),
-      alignment_mapq = integer(0)
+      alignment_strand = character(0)
     )
     write.table(empty_summary, opt$out_summary, sep = "\t", quote = FALSE, row.names = FALSE)
     
@@ -319,8 +286,7 @@ if (nrow(alignment_df) > 0) {
     alignment_start = integer(0),
     alignment_end = integer(0),
     alignment_length = integer(0),
-    alignment_strand = character(0),
-    alignment_mapq = integer(0)
+    alignment_strand = character(0)
   )
   write.table(empty_summary, opt$out_summary, sep = "\t", quote = FALSE, row.names = FALSE)
   
@@ -333,11 +299,6 @@ cat("Report written to:", opt$out_report, "\n")
 # Print summary statistics
 cat("=== PRIMER ALIGNMENT SUMMARY ===\n")
 cat("Total primers analyzed:", nrow(report), "\n")
-cat("Quality distribution:\n")
-quality_summary <- table(report$alignment_quality)
-for (qual in names(quality_summary)) {
-  cat("  ", qual, ":", quality_summary[qual], "\n")
-}
 
 cat("\nAlignment count distribution:\n")
 alignment_summary <- table(cut(report$num_alignments, 
