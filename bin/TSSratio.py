@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+
+"""Compute TES/TSS ratio from deepTools profile tables"""
+
 import pandas as pd
 import argparse
 

@@ -1,3 +1,8 @@
+
+<div align="center">
+  <img src="peakprime_logo.svg" alt="PeakPrime Logo" width="200"/>
+</div>
+
 # PeakPrime — MACS2-based 3'end RNA-seq primer design pipeline
 
 PeakPrime is a Nextflow pipeline that uses **MACS2 peak calling** to identify high-coverage regions in RNA-seq data and designs strand-specific cDNA primers with comprehensive quality control and visualization.
@@ -5,7 +10,7 @@ PeakPrime is a Nextflow pipeline that uses **MACS2 peak calling** to identify hi
 ## 🔬 Why Primer PeakFindR?
 
 - **Peak-based target identification**: Uses MACS2 to find statistically significant coverage peaks
-- **MACS2-aware quality control**: Integrates peak scores, p-values, and exonic overlap metrics
+- **MACS2-aware quality control**: Integrates peak scores, q-values, and exonic overlap metrics
 - **Strand-specific primer design**: Ensures primers are appropriate for cDNA amplification
 - **Comprehensive visualization**: Coverage plots with peak overlays and all-peaks visualization
 - **Optional transcriptome QC**: Bowtie2-based specificity checks to detect cross-reactivity
