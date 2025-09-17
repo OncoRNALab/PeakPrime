@@ -1,13 +1,13 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200" viewBox="0 0 400 200">
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="180" viewBox="0 0 400 180">
   <!-- Background -->
   <rect width="100%" height="100%" fill="#ffffff"/>
 
   <!-- Mountain / peak shape -->
-  <path d="M50,150 L100,80 L150,130 L200,60 L250,120 L300,90 L350,150"
-        stroke="#2C3E50" stroke-width="6" fill="none" />
+  <path d="M40,120 L90,50 L140,100 L190,30 L240,90 L290,60 L340,120"
+    stroke="#2C3E50" stroke-width="6" fill="none" />
 
   <!-- Arrow indicating 3' direction -->
-  <line x1="250" y1="120" x2="300" y2="90" stroke="#E67E22" stroke-width="8" marker-end="url(#arrowhead)"/>
+  <line x1="240" y1="90" x2="290" y2="60" stroke="#E67E22" stroke-width="8" marker-end="url(#arrowhead)"/>
   
   <defs>
     <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="0" refY="3.5" orient="auto">
@@ -16,18 +16,15 @@
   </defs>
 
   <!-- Gene / exon blocks beneath peaks -->
-  <rect x="70" y="150" width="40" height="15" fill="#3498DB"/>
-  <rect x="130" y="150" width="50" height="15" fill="#3498DB"/>
-  <rect x="190" y="150" width="60" height="15" fill="#3498DB"/>
-  <rect x="270" y="150" width="40" height="15" fill="#3498DB"/>
+  <rect x="60" y="120" width="40" height="15" fill="#3498DB"/>
+  <rect x="120" y="120" width="50" height="15" fill="#3498DB"/>
+  <rect x="180" y="120" width="60" height="15" fill="#3498DB"/>
+  <rect x="260" y="120" width="40" height="15" fill="#3498DB"/>
 
   <!-- Text: PeakPrime -->
-  <text x="50%" y="40" text-anchor="middle" font-family="sans-serif" font-size="32" fill="#2C3E50">
+  <text x="50%" y="28" text-anchor="middle" font-family="sans-serif" font-size="32" fill="#2C3E50">
     PeakPrime
   </text>
 
-  <!-- Subtitle tag -->
-  <text x="50%" y="180" text-anchor="middle" font-family="sans-serif" font-size="14" fill="#7F8C8D">
-    3′-end RNA-seq Primer Design Pipeline
-  </text>
+  <!-- Subtitle tag removed -->
 </svg>
