@@ -12,6 +12,8 @@ include { PRIMERS_TO_FASTA } from '../modules/PRIMERS_TO_FASTA.nf'
 include { ALIGN_PRIMERS_TRANSCRIPTOME } from '../modules/ALIGN_PRIMERS_TRANSCRIPTOME.nf'
 include { ANALYZE_PRIMER_ALIGNMENTS } from '../modules/ANALYZE_PRIMER_ALIGNMENTS.nf'
 include { SELECT_BEST_PRIMERS } from '../modules/SELECT_BEST_PRIMERS.nf'
+include { MAKEPLOTS_NEW } from '../modules/MAKEPLOTS_NEW.nf'
+include { SUMMARIZE_RESULTS } from '../modules/SUMMARIZE_RESULTS.nf'
 
 
 workflow primer_design {
@@ -98,6 +100,30 @@ workflow primer_design {
       )
       // Select best primers based on alignment summary
       best_primers = SELECT_BEST_PRIMERS(ANALYZE_PRIMER_ALIGNMENTS.out[0], ANALYZE_PRIMER_ALIGNMENTS.out[1])
+    }
+
+    // Optional: Generate plots if --makeplots is enabled
+    if (params.makeplots) {
+      // Read gene IDs from file, one per line, and create plotting channel
+      gene_plot_ch = genes_ch.splitText()
+        .map { it.trim() }
+        .filter { it }
+        .map { gene_id ->
+          def out_name = "plot_${gene_id}.png"
+          tuple(gene_id, out_name)
+        }
+
+      // Run plotting for each gene
+      MAKEPLOTS_NEW(
+        bw,
+        gtf_ch,
+        peaks_tsv,
+        primer_targets_bed,
+        qc_summary,
+        gene_plot_ch.map{ it[0] },
+        gene_plot_ch.map{ it[1] },
+        MACS2_CALLPEAK.out.narrowpeak.map{ it[1] }  // Extract narrowpeak file from tuple
+      )
     }
 
   emit:

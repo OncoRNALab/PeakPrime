@@ -1,6 +1,6 @@
 # PeakPrime — MACS2-based 3'end RNA-seq primer design pipeline
 
-Primer PeakFindR is a Nextflow pipeline that uses **MACS2 peak calling** to identify high-coverage regions in RNA-seq data and designs strand-specific cDNA primers with comprehensive quality control and visualization.
+PeakPrime is a Nextflow pipeline that uses **MACS2 peak calling** to identify high-coverage regions in RNA-seq data and designs strand-specific cDNA primers with comprehensive quality control and visualization.
 
 ## 🔬 Why Primer PeakFindR?
 
@@ -60,8 +60,22 @@ nextflow run main.nf \
   --bam sample.bam \
   --gtf annotations.gtf \
   --genes gene_list.txt \
-  --macs2_pvalue_threshold 0.01 \
+  --macs2_qvalue_threshold 0.01 \
   --macs2_min_peak_score 10 \
+  --outdir results/ \
+  -profile local
+```
+
+### With Custom Fragment Size and Shift
+```bash
+# For 3' RNA-seq data or low-coverage samples (< 1M reads), specify fragment extension and shift
+# WARNING: Only use these parameters for special cases - standard RNA-seq should use auto-detection
+nextflow run main.nf \
+  --bam sample.bam \
+  --gtf annotations.gtf \
+  --genes gene_list.txt \
+  --macs2_extsize 50 \
+  --macs2_shift -25 \
   --outdir results/ \
   -profile local
 ```
@@ -79,8 +93,20 @@ nextflow run main.nf \
 ```
 
 ### Generate Visualization Plots
+
+#### Option 1: Combined mode (primer design + plotting)
 ```bash
-# First run the main pipeline, then generate plots
+# Run primer design AND generate plots in one command
+nextflow run main.nf --makeplots \
+  --bam sample.bam \
+  --gtf annotations.gtf \
+  --genes gene_list.txt \
+  --outdir results/
+```
+
+#### Option 2: Standalone plotting mode (using pre-existing files)
+```bash
+# Generate plots from previous pipeline run results
 nextflow run main.nf --makeplots \
   --bw results/sample.bam.bw \
   --gtf annotations.gtf \
@@ -105,15 +131,37 @@ nextflow run main.nf --makeplots \
 ### MACS2 Peak Calling Parameters
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `--macs2_pvalue_threshold` | 0.05 | P-value threshold for peak significance |
+| `--macs2_qvalue_threshold` | 0.05 | Q-value (FDR) threshold for peak significance (controls both MACS2 calling and pipeline filtering) |
 | `--macs2_min_peak_score` | 0 | Minimum peak score threshold |
+| `--macs2_extsize` | null | Fragment size for extending reads (--extsize), null for auto-detection |
+| `--macs2_shift` | null | Shift for reads in bp (--shift), null for auto-detection |
+
+#### MACS2 Command Modes
+
+**Default mode** (when `macs2_extsize` is null):
+```bash
+macs2 callpeak -t file.bam -g hs --bdg --keep-dup auto -q 0.05
+```
+
+**Fragment modeling mode** (when `macs2_extsize` is specified):
+```bash
+macs2 callpeak -t file.bam -g hs --bdg --keep-dup auto -q 0.05 --nomodel --extsize 50 --shift 0 --call-summits
+```
 | `--peak_selection_metric` | score | Metric for selecting best peak per gene: 'score' or 'qvalue' |
 | `--peak_rank` | 1 | Which ranked peak to select per gene: 1 for best, 2 for second-best, etc. |
+
+> **📝 Parameter Migration Note**: The parameter `--macs2_pvalue_threshold` has been replaced with `--macs2_qvalue_threshold` for statistical consistency. The old parameter is still accepted for backward compatibility but will show a deprecation warning.
+
+> **⚠️ Important:** The `--macs2_extsize` and `--macs2_shift` parameters enable MACS2's `--nomodel` mode, which should only be used in special cases:
+> - **Low-coverage data** (< 1M mapped reads)
+> - **Specific protocols** where exact fragment sizes are known
+> - **Troubleshooting** when MACS2's automatic model building fails (always visualy inspect the automatic default macs2 called peaks)
+> 
+> For most standard RNA-seq experiments, leave these parameters as `null` to allow MACS2's automatic fragment size estimation, which typically provides better results.
 
 ### Primer Design Parameters
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `--pad` | 60 | Padding around peak center (bp) |
 | `--primer3_settings` | config/primer3_settings.txt | Primer3 configuration file |
 | `--genome_package` | BSgenome.Hsapiens.UCSC.hg38 | R/Bioconductor genome package |
 | `--fasta` | null | Genome FASTA file (alternative to BSgenome) |
@@ -122,8 +170,10 @@ nextflow run main.nf --makeplots \
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `--min_exonic_fraction` | null | Minimum required exonic fraction (0-1) |
-| `--smooth_k` | 31 | Smoothing window for coverage (odd integer) |
+| `--trim_to_exon` | false | Trim final window to exon containing the peak |
 | `--search_slop` | 1000 | Extra bases for BigWig import |
+
+> **📝 Note**: This pipeline uses MACS2 for statistically rigorous peak calling. Legacy parameters from previous derfinder-based implementations (`pad`, `smooth_k`, `sliding_window`, `trim_low_coverage_pct`) are no longer used in the current workflow architecture.
 
 ### Transcriptome Alignment QC (Optional)
 | Parameter | Description |
@@ -171,6 +221,14 @@ nextflow run main.nf --makeplots \
 #### Coverage Data
 - `*.bam.bw`: BigWig coverage files for visualization
 
+#### Pipeline Summary
+- `pipeline_summary.txt`: Comprehensive summary of pipeline results including:
+  - Total genes processed
+  - Genes with/without selected peaks
+  - Genes with primer sequences generated
+  - Genes with uniquely aligned primers (if transcriptome QC enabled)
+  - Failure reasons for genes without peaks
+
 ### Transcriptome QC Outputs (if enabled)
 - `primers_for_alignment.fa`: Primer sequences for alignment
 - `primers_alignment.bam`: Bowtie2 alignment results
@@ -192,7 +250,7 @@ The pipeline generates comprehensive visualization plots showing:
 ### Feature Plot (Bottom Panel)
 - **Gene structure**: All isoforms with exons (blocks) and introns (lines)
 - **Primer locations**: Arrows showing designed primer positions
-- **All MACS2 peaks**: **NEW!** Horizontal bars showing all detected peaks within the gene
+- **All MACS2 peaks**: Horizontal bars showing all detected peaks within the gene
 - **Peak intensity**: Color-coded by peak score/significance
 
 ### Example Visualization
@@ -207,6 +265,12 @@ Rscript bin/MakePlots_new.R \
   --primer results/primer_targets.bed \
   --narrowpeak results/macs2_peaks/sample_peaks.narrowPeak \
   --out ENSG00000067191_with_peaks.png
+```
+
+### Example Pipeline Summary
+```bash
+# Generate summary report for pipeline results
+python bin/summarize_pipeline_results.py results/your_output_directory/
 ```
 
 #### Sample Plot Output

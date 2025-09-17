@@ -112,22 +112,43 @@ plot_gene_with_window <- function(
   gene_gr     <- GRanges(gene_chr, IRanges(gene_start, gene_end), strand = gene_strand)
 
   # --- window from peaks.tsv (single read) ---
-  peaks <- fread(peaks_tsv)
-  if (!"gene" %in% names(peaks)) stop("peaks.tsv must have a 'gene' column.")
-  prow <- peaks[gene == gene_id]
+  peaks <- tryCatch({
+    fread(peaks_tsv)
+  }, error = function(e) {
+    warning(sprintf("Could not read %s: %s. Creating gene-only plot.", basename(peaks_tsv), e$message))
+    return(data.table())
+  })
   
-  # Handle missing genes gracefully
-  if (!nrow(prow)) {
-    warning(sprintf("Gene '%s' not present in %s - likely filtered out by peak quality thresholds. Creating gene-only plot.", gene_id, basename(peaks_tsv)))
-    # Use entire gene span as window when no peaks are available
+  # Handle empty file or missing gene column
+  has_peaks <- FALSE
+  if (nrow(peaks) == 0) {
+    warning(sprintf("File %s is empty - creating gene-only plot.", basename(peaks_tsv)))
     window_start <- gene_start
     window_end   <- gene_end
-    has_peaks    <- FALSE
+  } else if (!"gene" %in% names(peaks)) {
+    warning(sprintf("File %s missing 'gene' column - creating gene-only plot.", basename(peaks_tsv)))
+    window_start <- gene_start
+    window_end   <- gene_end
   } else {
-    window_start <- as.integer(prow$start[1])
-    window_end   <- as.integer(prow$end[1])
-    if (is.na(window_start) || is.na(window_end)) stop("peaks.tsv must have integer 'start' and 'end' columns.")
-    has_peaks    <- TRUE
+    prow <- peaks[gene == gene_id]
+    
+    # Handle missing genes gracefully
+    if (!nrow(prow)) {
+      warning(sprintf("Gene '%s' not present in %s - likely filtered out by peak quality thresholds. Creating gene-only plot.", gene_id, basename(peaks_tsv)))
+      # Use entire gene span as window when no peaks are available
+      window_start <- gene_start
+      window_end   <- gene_end
+    } else {
+      window_start <- as.integer(prow$start[1])
+      window_end   <- as.integer(prow$end[1])
+      if (is.na(window_start) || is.na(window_end)) {
+        warning(sprintf("Invalid coordinates in peaks.tsv for gene %s - using full gene span.", gene_id))
+        window_start <- gene_start
+        window_end   <- gene_end
+      } else {
+        has_peaks <- TRUE
+      }
+    }
   }
 
   # --- coverage over entire gene (interval ribbons; optional binning) ---
@@ -222,10 +243,21 @@ plot_gene_with_window <- function(
   } else {
     tx_order <- transcripts_all
   }
-  exon_df[,  y := match(transcript, tx_order)]
-  cds_df[,   y := match(transcript, tx_order)]
-  intron_df[, y := match(transcript, tx_order)]
-  utr_df[, y := match(transcript, tx_order)]
+  
+  # Only assign y coordinates if the data frames have rows
+  if (nrow(exon_df) > 0) {
+    exon_df[,  y := match(transcript, tx_order)]
+  }
+  if (nrow(cds_df) > 0) {
+    cds_df[,   y := match(transcript, tx_order)]
+  }
+  if (nrow(intron_df) > 0) {
+    intron_df[, y := match(transcript, tx_order)]
+  }
+  if (nrow(utr_df) > 0) {
+    utr_df[, y := match(transcript, tx_order)]
+  }
+  
   valid_transcripts <- tx_order
   primer_lane <- length(valid_transcripts) + 1
   peaks_lane <- primer_lane + 1
@@ -237,8 +269,14 @@ plot_gene_with_window <- function(
   # --- QC subtitle (optional) + annotate what 100% means ---
   qc_lab <- NULL
   if (!is.null(qc_tsv) && file.exists(qc_tsv)) {
-    qc <- fread(qc_tsv)
-    if ("gene" %in% names(qc)) {
+    qc <- tryCatch({
+      fread(qc_tsv)
+    }, error = function(e) {
+      warning(sprintf("Could not read QC file %s: %s", basename(qc_tsv), e$message))
+      return(data.table())
+    })
+    
+    if (nrow(qc) > 0 && "gene" %in% names(qc)) {
       qrow <- qc[gene == gene_id]
       if (nrow(qrow)) {
         # Handle both old (coverage-based) and new (MACS2-based) QC formats

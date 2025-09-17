@@ -8,10 +8,11 @@ include { makeplots } from './workflows/makeplots.nf'
 include { primer_design } from './workflows/primer_design.nf'
 
 workflow {
-  if (params.makeplots) {
+  if (params.makeplots && !params.bam) {
+    // Standalone plotting mode using pre-existing files
     makeplots ()
   } else {
-    // Run the primer_design subworkflow
+    // Run primer design (which will include plotting if --makeplots is enabled)
     primer_design()
   }
 }

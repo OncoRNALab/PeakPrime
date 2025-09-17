@@ -22,11 +22,11 @@ opt_list <- list(
   make_option("--gtf", type="character", help="GTF annotation file"),
   make_option("--genes", type="character", help="Target genes file"),
   make_option("--fasta", type="character", default="NO_FILE", help="Genome FASTA file"),
-  make_option("--pvalue_threshold", type="double", default=0.05, help="p-value threshold for peak filtering"),
+  make_option("--qvalue_threshold", type="double", default=0.05, help="q-value (FDR) threshold for peak filtering"),
+  make_option("--pvalue_threshold", type="double", default=NULL, help="DEPRECATED: Use --qvalue_threshold instead"),
   make_option("--min_peak_score", type="double", default=0, help="Minimum peak score threshold"),
   make_option("--peak_selection_metric", type="character", default="score", help="Metric for selecting best peak per gene: 'score' or 'qvalue'"),
   make_option("--peak_rank", type="integer", default=1, help="Which ranked peak to select per gene: 1 for best, 2 for second-best, etc."),
-  make_option("--pad", type="integer", default=100, help="[UNUSED] Legacy parameter - target regions now use exact peak boundaries"),
   make_option("--min_exonic_fraction", type="character", default="NA", help="Minimum exonic fraction (or NA to disable)"),
   make_option("--trim_to_exon", type="character", default="false", help="Trim peaks to exon boundaries"),
   make_option("--out_fa", type="character", help="Output FASTA file"),
@@ -36,6 +36,12 @@ opt_list <- list(
 )
 
 opt <- parse_args(OptionParser(option_list = opt_list))
+
+# Handle backward compatibility for pvalue_threshold parameter
+if (!is.null(opt$pvalue_threshold)) {
+  warning("Parameter --pvalue_threshold is deprecated. Use --qvalue_threshold instead. Using pvalue_threshold value for qvalue_threshold.")
+  opt$qvalue_threshold <- opt$pvalue_threshold
+}
 
 # Parse parameters
 min_exonic_fraction <- if(opt$min_exonic_fraction == "NA") NA_real_ else as.numeric(opt$min_exonic_fraction)
@@ -126,8 +132,8 @@ if(nrow(peaks) > 0) {
   all_genes_qc$peak_count_raw[match(names(peak_counts), all_genes_qc$gene_id)] <- as.numeric(peak_counts)
 }
 
-# Filter peaks by p-value and score
-significant_peaks <- peaks[pvalue >= -log10(opt$pvalue_threshold) & score >= opt$min_peak_score]
+# Filter peaks by q-value and score
+significant_peaks <- peaks[qvalue >= -log10(opt$qvalue_threshold) & score >= opt$min_peak_score]
 cat("Retained", nrow(significant_peaks), "significant peaks after filtering\n")
 
 # Track genes with significant peaks
@@ -149,7 +155,7 @@ if(nrow(significant_peaks) > 0) {
   
   # Update failure reasons for genes that had peaks but lost them
   failed_at_significance <- all_genes_qc$has_macs2_peaks & !all_genes_qc$has_significant_peaks
-  all_genes_qc$failure_reason[failed_at_significance] <- paste0("Failed significance filter (p>", opt$pvalue_threshold, " or score<", opt$min_peak_score, ")")
+  all_genes_qc$failure_reason[failed_at_significance] <- paste0("Failed significance filter (q>", opt$qvalue_threshold, " or score<", opt$min_peak_score, ")")
 }
 
 if(nrow(significant_peaks) == 0) {
@@ -401,21 +407,23 @@ if(!is.na(min_exonic_fraction)) {
 all_genes_qc$final_selection[all_genes_qc$gene_id %in% target_regions$gene_id] <- TRUE
 
 # Update final selected peak coordinates (after any trimming/filtering)
-for(i in 1:length(target_regions)) {
-  gene_id <- target_regions$gene_id[i]
-  qc_idx <- which(all_genes_qc$gene_id == gene_id)
-  
-  # Update with final coordinates (may be trimmed)
-  all_genes_qc$peak_chr[qc_idx] <- as.character(seqnames(target_regions[i]))
-  all_genes_qc$peak_start[qc_idx] <- start(target_regions[i])
-  all_genes_qc$peak_end[qc_idx] <- end(target_regions[i])
-  all_genes_qc$peak_strand[qc_idx] <- as.character(strand(target_regions[i]))
+if(length(target_regions) > 0) {
+  for(i in 1:length(target_regions)) {
+    gene_id <- target_regions$gene_id[i]
+    qc_idx <- which(all_genes_qc$gene_id == gene_id)
+    
+    # Update with final coordinates (may be trimmed)
+    all_genes_qc$peak_chr[qc_idx] <- as.character(seqnames(target_regions[i]))
+    all_genes_qc$peak_start[qc_idx] <- start(target_regions[i])
+    all_genes_qc$peak_end[qc_idx] <- end(target_regions[i])
+    all_genes_qc$peak_strand[qc_idx] <- as.character(strand(target_regions[i]))
+  }
 }
 
 cat("Extracting sequences...\n")
 
 # Extract sequences
-if(opt$fasta != "NO_FILE" && file.exists(opt$fasta)) {
+if(length(target_regions) > 0 && opt$fasta != "NO_FILE" && file.exists(opt$fasta)) {
   fasta_file <- Rsamtools::FaFile(opt$fasta)
   Rsamtools::open.FaFile(fasta_file)
   on.exit(Rsamtools::close.FaFile(fasta_file), add = TRUE)
@@ -431,41 +439,69 @@ if(opt$fasta != "NO_FILE" && file.exists(opt$fasta)) {
   
   Biostrings::writeXStringSet(sequences, filepath = opt$out_fa)
 } else {
-  cat("No FASTA file provided or file does not exist. Skipping sequence extraction.\n")
+  if(length(target_regions) == 0) {
+    cat("No target regions found. Creating empty output files.\n")
+  } else {
+    cat("No FASTA file provided or file does not exist. Skipping sequence extraction.\n")
+  }
   writeLines("", opt$out_fa)
 }
 
 # Create BED file
-bed_df <- data.frame(
-  chr = seqnames(target_regions),
-  start = start(target_regions) - 1, # BED is 0-based
-  end = end(target_regions),
-  name = paste0(target_regions$gene_id, "_peak"),
-  score = target_regions$peak_score,
-  strand = strand(target_regions)
-)
-
-write.table(bed_df, file = opt$out_bed, sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
+if(length(target_regions) > 0) {
+  bed_df <- data.frame(
+    chr = seqnames(target_regions),
+    start = start(target_regions) - 1, # BED is 0-based
+    end = end(target_regions),
+    name = paste0(target_regions$gene_id, "_peak"),
+    score = target_regions$peak_score,
+    strand = strand(target_regions)
+  )
+  write.table(bed_df, file = opt$out_bed, sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
+} else {
+  # Create empty BED file
+  writeLines("", opt$out_bed)
+}
 
 # Create output DataFrame
-peaks_df <- data.frame(
-  gene = target_regions$gene_id,
-  chr = seqnames(target_regions),
-  start = start(target_regions),
-  end = end(target_regions),
-  strand = strand(target_regions),
-  summit_pos = target_regions$summit_pos,
-  peak_score = target_regions$peak_score,
-  peak_pvalue = target_regions$peak_pvalue,
-  peak_qvalue = target_regions$peak_qvalue,
-  exonic_fraction = target_regions$exonic_fraction,
-  trimmed_to_exon = target_regions$trimmed_to_exon,
-  strategy = paste0("macs2_peak_boundaries_by_", opt$peak_selection_metric),
-  stringsAsFactors = FALSE
-)
+if(length(target_regions) > 0) {
+  peaks_df <- data.frame(
+    gene = target_regions$gene_id,
+    chr = seqnames(target_regions),
+    start = start(target_regions),
+    end = end(target_regions),
+    strand = strand(target_regions),
+    summit_pos = target_regions$summit_pos,
+    peak_score = target_regions$peak_score,
+    peak_pvalue = target_regions$peak_pvalue,
+    peak_qvalue = target_regions$peak_qvalue,
+    exonic_fraction = target_regions$exonic_fraction,
+    trimmed_to_exon = target_regions$trimmed_to_exon,
+    strategy = paste0("macs2_peak_boundaries_by_", opt$peak_selection_metric),
+    stringsAsFactors = FALSE
+  )
+  write.table(peaks_df, file = opt$out_peaks, sep = "\t", quote = FALSE, row.names = FALSE)
+} else {
+  # Create empty TSV file with headers
+  empty_df <- data.frame(
+    gene = character(0),
+    chr = character(0),
+    start = integer(0),
+    end = integer(0),
+    strand = character(0),
+    summit_pos = integer(0),
+    peak_score = numeric(0),
+    peak_pvalue = numeric(0),
+    peak_qvalue = numeric(0),
+    exonic_fraction = numeric(0),
+    trimmed_to_exon = logical(0),
+    strategy = character(0),
+    stringsAsFactors = FALSE
+  )
+  write.table(empty_df, file = opt$out_peaks, sep = "\t", quote = FALSE, row.names = FALSE)
+}
 
 # Write output files
-write.table(peaks_df, file = opt$out_peaks, sep = "\t", quote = FALSE, row.names = FALSE)
 
 # Write comprehensive QC report (all genes, not just selected ones)
 write.table(all_genes_qc, file = opt$out_qc, sep = "\t", quote = FALSE, row.names = FALSE)

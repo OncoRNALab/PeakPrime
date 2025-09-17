@@ -17,17 +17,17 @@ def main(outdir):
     
     if qc_file and os.path.getsize(qc_file) > 0:
         qc_df = pd.read_csv(qc_file, sep='\t')
-        all_target_genes = set(qc_df['gene_id'])
+        all_target_genes = set(str(gid) for gid in qc_df['gene_id'])
         # Genes with selected peaks (final_selection == True)
-        genes_with_peak = set(qc_df[qc_df['final_selection'] == True]['gene_id'])
+        genes_with_peak = set(str(gid) for gid in qc_df[qc_df['final_selection'] == True]['gene_id'])
         # Genes without selected peaks (final_selection == False)
-        genes_without_peak = set(qc_df[qc_df['final_selection'] == False]['gene_id'])
+        genes_without_peak = set(str(gid) for gid in qc_df[qc_df['final_selection'] == False]['gene_id'])
     else:
         # Fallback: try to get genes with peaks from selected_peaks.tsv
         peaks_file = find_file('selected_peaks.tsv', outdir)
         if peaks_file and os.path.getsize(peaks_file) > 0:
             peaks_df = pd.read_csv(peaks_file, sep='\t')
-            genes_with_peak = set(peaks_df['gene'])
+            genes_with_peak = set(str(gid) for gid in peaks_df['gene'])
     
     print(f"Total target genes: {len(all_target_genes)}")
     print(f"Genes with selected peak: {len(genes_with_peak)}")
@@ -40,13 +40,13 @@ def main(outdir):
         if primers_file.endswith('.tsv'):
             primers_df = pd.read_csv(primers_file, sep='\t')
             if 'gene_id' in primers_df.columns:
-                genes_with_primer = set(primers_df['gene_id'])
+                genes_with_primer = set(str(gid) for gid in primers_df['gene_id'])
         else:
             # Fallback: parse Primer3 output for SEQUENCE_ID
             with open(primers_file) as f:
                 for line in f:
                     if line.startswith('SEQUENCE_ID='):
-                        genes_with_primer.add(line.strip().split('=',1)[1])
+                        genes_with_primer.add(str(line.strip().split('=',1)[1]))
     print(f"Genes with at least one Primer3 primer: {len(genes_with_primer)}")
 
     # 3. Genes with at least one aligned primer
@@ -55,7 +55,7 @@ def main(outdir):
     if align_file and os.path.getsize(align_file) > 0:
         align_df = pd.read_csv(align_file, sep='\t')
         if 'gene_id' in align_df.columns:
-            genes_with_aligned = set(align_df['gene_id'])
+            genes_with_aligned = set(str(gid) for gid in align_df['gene_id'])
     print(f"Genes with at least one aligned primer: {len(genes_with_aligned)}")
 
     # 4. Genes with at least one uniquely aligned or best primer
@@ -65,7 +65,7 @@ def main(outdir):
     if best_file and os.path.getsize(best_file) > 0:
         best_df = pd.read_csv(best_file, sep='\t')
         if 'gene_id' in best_df.columns:
-            genes_with_unique = set(best_df['gene_id'])
+            genes_with_unique = set(str(gid) for gid in best_df['gene_id'])
     print(f"Genes with at least one uniquely aligned or best primer: {len(genes_with_unique)}")
 
     print("\nSummary Table:")

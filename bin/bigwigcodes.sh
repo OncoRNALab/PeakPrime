@@ -1,21 +1,59 @@
-bamCoverage -b Merged_S7_S12.unique.bam -o Merged_S7_S12.unique.bam.bw \
+samtools merge -@8 -o MAQCA_merged.bam MAQCA_1_dedup.bam MAQCA_2_dedup.bam
+
+bamCoverage -b Merged_S7_S12.unique.bam -o Merged_S7_S12.Bin1.bw \
   --normalizeUsing CPM \
-  --binSize 10 --ignoreDuplicates
-# Strand-specific libraries? Add: --filterRNAstrand forward|reverse
+  --binSize 1 --ignoreDuplicates
 
 computeMatrix scale-regions \
-  -S Merged_S7_S12.unique.bam.bw \
+  -S Merged_S7_S12.Bin1.bw \
   -R /data/gent/vo/000/gvo00027/resources/Ensembl_transcriptomes/Homo_sapiens/GRCh38/Homo_sapiens.GRCh38.109.chrIS_spikes_45S.gtf \
   --regionBodyLength 100 \
   --beforeRegionStartLength 0 \
   --afterRegionStartLength 0 \
   --binSize 1 \
   --skipZeros \
-  -o matrix_PanoramaST_merged.gz \
-  --outFileNameMatrix matrix_PanoramaST_merged.tab \
+  -o matrix_Merged_S7_S12_Bin1.gz \
+  --outFileNameMatrix matrix_Merged_S7_S12_Bin1.tab \
   --smartLabels
 
-plotProfile -m matrix_PanoramaST_merged.gz -out geneBody_PanoramaMerged.png
+plotProfile -m matrix_Merged_S7_S12_Bin1.gz -out geneBody_Merged_S7_S12_Bin1.png
+
+bamCoverage -b MAQCA_merged.bam -o MAQCA_merged.bam.bw \
+  --normalizeUsing CPM \
+  --binSize 10 --ignoreDuplicates
+# Strand-specific libraries? Add: --filterRNAstrand forward|reverse
+
+bamCoverage -b MAQCA_2_dedup.bam -o MAQCA_2_dedup.bam.bw \
+  --normalizeUsing CPM \
+  --binSize 10 --ignoreDuplicates
+
+computeMatrix reference-point \
+  -S Merged_S7_S12.unique.bam.bw\
+  -R /data/gent/vo/000/gvo00027/resources/Ensembl_transcriptomes/Homo_sapiens/GRCh38/Homo_sapiens.GRCh38.109.chrIS_spikes_45S.gtf \
+  --referencePoint TSS \
+  -b 2000 -a 2000 \
+  --metagene \
+  --nanAfterEnd \
+  --skipZeros \
+  -o matrix_TSS_nanAfterEnd.gz \
+  --outFileNameMatrix matrix_TSS_nanAfterEnd.tsv \
+  --outFileSortedRegions regions_TSS_nanAfterEnd.bed
+
+plotProfile -m matrix_MergedS7S12_nanAfterEnd.gz -out geneBody_MergedS7S12_nanAfterEnd.png
+
+computeMatrix scale-regions \
+  -S MAQCA_2_dedup.bam.bw \
+  -R /data/gent/vo/000/gvo00027/resources/Ensembl_transcriptomes/Homo_sapiens/GRCh38/Homo_sapiens.GRCh38.109.chrIS_spikes_45S.gtf \
+  --regionBodyLength 100 \
+  --beforeRegionStartLength 0 \
+  --afterRegionStartLength 0 \
+  --binSize 1 \
+  --skipZeros \
+  -o matrix_MAQC2_QSP.gz \
+  --outFileNameMatrix matrix_MAQC2_QSP.tab \
+  --smartLabels
+
+
 
 bamCoverage -b Microsample_1_50uL_20250409_Aligned.sortedByCoord.out.bam -o Microsample_1.bam.bw \
   --normalizeUsing CPM \
@@ -37,6 +75,21 @@ plotProfile -m matrix_QSP.gz -out geneBody_QSP.png
 
 
 igvtools count ./testdata/Merged_S7_S12.unique.bam Merged_S7_S12.unique.bam.tdf $VSC_DATA_VO/PPOL/resources/repos/IGVTools/genomes/hg38.chrom.sizes
+igvtools count MAQCA_1_dedup.bam MAQCA_1_dedup.bam.tdf $VSC_DATA_VO/PPOL/resources/repos/IGVTools/genomes/hg38.chrom.sizes
+macs2 callpeak -t /user/gent/446/vsc44685/DataVO_dir/QSP_MAQCA/Samples/star/RNA021484_1Aligned.sortedByCoord.out_dedup.bam --outdir . -n CalledPeaks2_RNA021484_1 -g hs --bdg --keep-dup auto
+macs2 callpeak -t MAQCA_merged.bam --outdir . -n CalledPeaks_MAQCA1 -g hs --bdg --keep-dup auto
+
+macs2 callpeak \
+  -t /user/gent/446/vsc44685/DataVO_dir/QSP_MAQCA/Samples/star/RNA021484_1Aligned.sortedByCoord.out_dedup.bam \
+  -g hs -n RNA021484_1_3prime \
+  --nomodel --extsize 75 --shift 0 \
+  --call-summits -q 0.01 \
+  --keep-dup auto \
+  -B --SPMR
+
+
+bedGraphToBigWig treat_pileup.sorted.bdg $VSC_DATA_VO/PPOL/resources/repos/IGVTools/genomes/hg38.chrom.sizes treat_pileup.bw
+
 
 {"context":["the current pipeline with the option --makeplots generates coverage plots highlighting the selected peak","peaks are called using macs2 in the process MACS2_CALLPEAK"],
 "new_feature":"add a new plot type that displays all called peaks within the gene span",
@@ -230,3 +283,126 @@ Completed at: 08-Sep-2025 16:06:32
 Duration    : 5m 22s
 CPU hours   : 0.1
 Succeeded   : 6
+
+
+#Salmon
+
+for fq in *R2.fastq.gz
+do
+    sample=$(basename $fq _R2.fastq.gz)
+    salmon quant -i /data/gent/vo/000/gvo00027/resources/Salmon_index/HomoSapiens/salmon_index \
+      -l A \
+      -r $fq \
+      --fldMean 250 --fldSD 100 \
+      -p 8 \
+      -o salmon_out/${sample}
+done
+
+
+## gene body coverage only for dominant isoforms
+#kallisto - getcdominat isoforms
+python bin/dominat_isoform.py \
+  -g /data/gent/vo/000/gvo00027/resources/Ensembl_transcriptomes/Homo_sapiens/GRCh38/Homo_sapiens.GRCh38.109.chrIS_spikes_45S.gtf \
+  -q testdata/kallisto_res/kallisto_S7/abundance.tsv testdata/kallisto_res/kallisto_S8/abundance.tsv testdata/kallisto_res/kallisto_S9/abundance.tsv \
+     testdata/kallisto_res/kallisto_S10/abundance.tsv testdata/kallisto_res/kallisto_S11/abundance.tsv testdata/kallisto_res/kallisto_S12/abundance.tsv \
+  -o dominant_condition_kallisto.gtf
+
+
+computeMatrix scale-regions \
+  -S testdata/Merged_S7_S12.unique.bam.bw \
+  -R testdata/dominant_condition_kallisto.gtf \
+  --regionBodyLength 100 \
+  --beforeRegionStartLength 0 \
+  --afterRegionStartLength 0 \
+  --binSize 1 \
+  --skipZeros \
+  -o matrix_dominant.gz \
+  --outFileNameMatrix matrix_dominant.tab \
+  --smartLabels
+
+plotProfile -m matrix_dominant.gz -out geneBody_dominant.png
+
+##splitting into long and short transcripts
+awk '$3=="transcript" && $5-$4 < 1000 {print}' dominant_condition_kallisto.gtf > dominant_short.gtf
+awk '$3=="transcript" && $5-$4 > 5000 {print}' dominant_condition_kallisto.gtf > dominant_long.gtf
+
+#compute for short transcripts
+computeMatrix scale-regions \
+  -S Merged_S7_S12.unique.bam.bw \
+  -R dominant_short.gtf \
+  --regionBodyLength 100 \
+  --beforeRegionStartLength 0 \
+  --afterRegionStartLength 0 \
+  --binSize 1 \
+  --skipZeros \
+  -o matrix_dominant_short.gz \
+  --outFileNameMatrix matrix_dominant_short.tab \
+  --smartLabels
+
+plotProfile -m matrix_dominant_short.gz -out geneBody_dominant_short.png
+
+#compute for long transcripts
+computeMatrix scale-regions \
+  -S Merged_S7_S12.unique.bam.bw \
+  -R dominant_long.gtf \
+  --regionBodyLength 100 \
+  --beforeRegionStartLength 0 \
+  --afterRegionStartLength 0 \
+  --binSize 1 \
+  --skipZeros \
+  -o matrix_dominant_long.gz \
+  --outFileNameMatrix matrix_dominant_long.tab \
+  --smartLabels
+
+plotProfile -m matrix_dominant_long.gz -out geneBody_dominant_long.png
+
+
+#focus on 5' and 3' ends individually
+computeMatrix reference-point \
+  -S Merged_S7_S12.unique.bam.bw \
+  -R dominant_condition_kallisto.gtf \
+  --referencePoint TSS \
+  -b 500 -a 500 \
+  -o matrix_dominant_TSS.gz \
+  --skipZeros
+
+plotProfile -m matrix_dominant_TSS.gz -out geneBody_dominant_TSS.png --outFileNameData profile_TSS.tab
+
+computeMatrix reference-point \
+  -S Merged_S7_S12.unique.bam.bw \
+  -R dominant_condition_kallisto.gtf \
+  --referencePoint TES \
+  -b 1000 -a 1000 \
+  -o matrix_dominant_TES.gz \
+  --skipZeros
+  
+plotProfile -m matrix_dominant_TES.gz -out geneBody_dominant_TES.png --outFileNameData profile_TES.tab
+
+
+#with MAQCA_1 an TSS
+
+computeMatrix reference-point \
+  -S MAQCA_merged.bam.bw \
+  -R /data/gent/vo/000/gvo00027/resources/Ensembl_transcriptomes/Homo_sapiens/GRCh38/Homo_sapiens.GRCh38.109.chrIS_spikes_45S.gtf \
+  --referencePoint TSS \
+  -b 500 -a 500 \
+  -o matrix_MAQCA_merged_TSS.gz \
+  --skipZeros
+plotProfile -m matrix_MAQCA_merged_TSS.gz -out geneBody_MAQCA_merged_TSS.png --outFileNameData profile_MAQCA_TSS.tab
+
+
+
+computeMatrix reference-point \
+  -S MAQCA_merged.bam.bw \
+  -R /data/gent/vo/000/gvo00027/resources/Ensembl_transcriptomes/Homo_sapiens/GRCh38/Homo_sapiens.GRCh38.109.chrIS_spikes_45S.gtf \
+  --referencePoint TES \
+  -b 500 -a 500 \
+  -o matrix_MAQCA_merged_TES.gz \
+  --skipZeros
+
+plotProfile -m matrix_MAQCA_merged_TES.gz -out geneBody_MAQCA_merged_TES.png --outFileNameData profile_MAQCA_TES.tab
+
+python bin/TSSratio.py \
+  --tss testdata/profile_MAQCA_TSS.tab \
+  --tes testdata/profile_MAQCA_TES.tab \
+  -o ratios_MAQCA.txt

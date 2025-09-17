@@ -26,6 +26,21 @@ PeakPrime addresses these limitations by providing:
 - **Peak-aware quality control**: Incorporates peak scores, p-values, and q-values into primer target selection
 - **Comprehensive visualization**: Shows all detected peaks in gene context with selected primers
 - **Flexible parameters**: Configurable peak calling thresholds, quality metrics, and primer design settings
+- **Statistical evolution**: Transition from window-based to statistically rigorous peak-based target selection
+
+### 1.4 Pipeline Architecture Evolution
+
+PeakPrime has evolved from earlier coverage-based approaches to the current MACS2-based implementation:
+
+**Legacy Approach (deprecated)**:
+- Used sliding windows and coverage smoothing
+- Parameters: `pad`, `smooth_k`, `sliding_window`, `trim_low_coverage_pct`
+- Limited statistical foundation for target selection
+
+**Current MACS2 Approach**:
+- Statistical peak calling with proper background modeling
+- Parameters: `macs2_qvalue_threshold`, `macs2_min_peak_score`, `macs2_extsize`, `macs2_shift`
+- Rigorous statistical foundation ensuring reproducible target selection
 
 ## 2. Pipeline Methodology
 
@@ -82,9 +97,8 @@ For each target gene:
 
 **Target Window Definition**:
 - Uses exact peak boundaries as defined by MACS2
-- Optional padding around peaks (parameter: `--pad`)
 - Optional trimming to exon boundaries (`--trim_to_exon`)
-- Optional trimming of low-coverage regions
+- Configurable minimum exonic fraction requirement (`--min_exonic_fraction`)
 
 #### 2.2.3 Sequence Extraction
 
@@ -123,7 +137,7 @@ Critical innovation for cDNA compatibility:
 - Primer length: 18-25 bp (optimal: 20 bp)
 - Melting temperature: 57-63°C (optimal: 60°C)
 - GC content: 20-80%
-- Return top 5 primer pairs per target
+- Return top 20 primer pairs per target
 
 #### 2.2.5 Optional Transcriptome Alignment QC
 
@@ -242,18 +256,22 @@ PRIMER_MAX_TM=63.0
 ### 3.3 Parameter Configuration
 
 #### 3.3.1 MACS2 Parameters
-- `--macs2_pvalue_threshold`: P-value cutoff (default: 0.05)
+- `--macs2_qvalue_threshold`: Q-value (FDR) cutoff for peak detection (default: 0.05, controls both MACS2 calling and pipeline filtering)
 - `--macs2_min_peak_score`: Minimum peak score (default: 0)
+- `--macs2_extsize`: Fragment size for extending reads (null for auto-detection)
+- `--macs2_shift`: Shift for reads in bp (null for auto-detection)
 
 #### 3.3.2 Target Selection Parameters
-- `--pad`: Padding around peaks in bp (default: 60)
 - `--min_exonic_fraction`: Minimum exonic overlap (0-1, optional)
 - `--trim_to_exon`: Trim targets to exon boundaries (true/false)
+- `--peak_selection_metric`: Metric for selecting best peak ('score' or 'qvalue')
+- `--peak_rank`: Which ranked peak to select (1 for best, 2 for second-best, etc.)
 
 #### 3.3.3 Quality Control Parameters
-- `--smooth_k`: Coverage smoothing window (default: 31)
 - `--search_slop`: Extra bases for BigWig import (default: 1000)
 - `--max_primers_per_gene`: Maximum primers for QC (default: 20)
+
+**Note**: This pipeline uses MACS2 for statistically rigorous peak calling. Legacy parameters from previous derfinder-based implementations (`pad`, `smooth_k`, `sliding_window`, `trim_low_coverage_pct`) are no longer used in the current workflow architecture.
 
 ## 4. Output Files and Formats
 
@@ -527,10 +545,13 @@ nextflow run main.nf \
   --bam sample.bam \
   --gtf annotations.gtf \
   --genes gene_list.txt \
-  --macs2_pvalue_threshold 0.01 \
+  --macs2_qvalue_threshold 0.01 \
   --macs2_min_peak_score 10 \
+  --macs2_extsize 200 \
+  --macs2_shift 100 \
   --min_exonic_fraction 0.9 \
   --trim_to_exon true \
+  --peak_selection_metric qvalue \
   --outdir results/ \
   -profile local
 ```
@@ -590,7 +611,7 @@ nextflow run main.nf --makeplots \
 #### 8.1.1 No Peaks Detected
 **Symptoms**: MACS2 produces no significant peaks
 **Solutions**:
-- Increase p-value threshold (`--macs2_pvalue_threshold 0.1`)
+- Increase q-value threshold (`--macs2_qvalue_threshold 0.1`)
 - Check input BAM file coverage depth
 - Verify gene presence in BAM file regions
 - Review MACS2 log files for errors
