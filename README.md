@@ -1,5 +1,5 @@
 
-<div align="center">
+<div align="left">
   <img src="peakprime_logo.svg" alt="PeakPrime Logo" width="200"/>
 </div>
 
