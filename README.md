@@ -87,7 +87,7 @@ nextflow run main.nf \
   -profile local
 ```
 
-### Use Second-Best Peaks
+### Use Alternative Peak Rankings
 ```bash
 # Select second-best peaks instead of the best peaks per gene
 nextflow run main.nf \
@@ -96,6 +96,15 @@ nextflow run main.nf \
   --genes gene_list.txt \
   --peak_rank 2 \
   --outdir results_second_best/ \
+  -profile local
+
+# Select third-best peaks for genes with multiple isoforms
+nextflow run main.nf \
+  --bam sample.bam \
+  --gtf annotations.gtf \
+  --genes gene_list.txt \
+  --peak_rank 3 \
+  --outdir results_third_best/ \
   -profile local
 ```
 
@@ -155,7 +164,7 @@ macs2 callpeak -t file.bam -g hs --bdg --keep-dup auto -q 0.05
 macs2 callpeak -t file.bam -g hs --bdg --keep-dup auto -q 0.05 --nomodel --extsize 50 --shift 0 --call-summits
 ```
 | `--peak_selection_metric` | score | Metric for selecting best peak per gene: 'score' or 'qvalue' |
-| `--peak_rank` | 1 | Which ranked peak to select per gene: 1 for best, 2 for second-best, etc. |
+| `--peak_rank` | 1 | Which ranked peak to select per gene: any positive integer (1 for best, 2 for second-best, 3 for third-best, etc.) |
 
 > **📝 Parameter Migration Note**: The parameter `--macs2_pvalue_threshold` has been replaced with `--macs2_qvalue_threshold` for statistical consistency. The old parameter is still accepted for backward compatibility but will show a deprecation warning.
 
@@ -283,6 +292,34 @@ Rscript bin/MakePlots_new.R \
 # Generate summary report for pipeline results
 python bin/summarize_pipeline_results.py results/your_output_directory/
 ```
+
+### Interactive Exploration with Shiny App
+
+PeakPrime includes an interactive Shiny application for exploring results:
+
+```bash
+# Navigate to your results directory
+cd results/your_output_directory/
+
+# Copy the Shiny app
+cp ../../app.R .
+
+# Launch the interactive explorer (in R)
+R
+> shiny::runApp("app.R")
+
+# Or from command line (requires shiny package)
+Rscript -e "shiny::runApp('app.R')"
+```
+
+**Features of the Interactive Explorer:**
+- **Automatic file discovery**: Finds all required PeakPrime output files
+- **Gene filtering**: View only genes with selected peaks or browse all genes
+- **Interactive plotting**: Customize y-axis scaling, primer display, and isoform limits
+- **QC summary tables**: View detailed quality control metrics for each gene
+- **Real-time updates**: Changes to plot settings update the visualization instantly
+
+**Required R packages**: `shiny`, `DT`, `rtracklayer`, `data.table`, `ggplot2`, `GenomicRanges`, `IRanges`, `GenomicFeatures`, `grid`
 
 #### Sample Plot Output
 ![Example Gene Visualization](plot_ENSG00000096384.png)

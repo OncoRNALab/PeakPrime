@@ -26,7 +26,7 @@ opt_list <- list(
   make_option("--pvalue_threshold", type="double", default=NULL, help="DEPRECATED: Use --qvalue_threshold instead"),
   make_option("--min_peak_score", type="double", default=0, help="Minimum peak score threshold"),
   make_option("--peak_selection_metric", type="character", default="score", help="Metric for selecting best peak per gene: 'score' or 'qvalue'"),
-  make_option("--peak_rank", type="integer", default=1, help="Which ranked peak to select per gene: 1 for best, 2 for second-best, etc."),
+  make_option("--peak_rank", type="integer", default=1, help="Which ranked peak to select per gene: any positive integer (1 for best, 2 for second-best, 3 for third-best, etc.)"),
   make_option("--min_exonic_fraction", type="character", default="NA", help="Minimum exonic fraction (or NA to disable)"),
   make_option("--trim_to_exon", type="character", default="false", help="Trim peaks to exon boundaries"),
   make_option("--force_exonic_trimming", type="character", default="false", help="Force trimming to exon+UTR boundaries for primer safety"),
@@ -257,6 +257,12 @@ for(gene in unique(ordered_peaks$gene_id)) {
 # Track genes that couldn't get the requested rank
 if(length(genes_without_rank) > 0) {
   cat("Genes without sufficient peaks for rank", opt$peak_rank, ":", length(genes_without_rank), "\n")
+  cat("Details of genes with insufficient peaks:\n")
+  for(g in genes_without_rank) {
+    available_peaks <- sum(ordered_peaks$gene_id == g)
+    cat("  - Gene", g, "has only", available_peaks, "peak(s), cannot select rank", opt$peak_rank, "\n")
+  }
+  
   # Update QC for genes without sufficient peaks
   all_genes_qc$failure_reason[all_genes_qc$gene_id %in% genes_without_rank] <- 
     paste0("Insufficient peaks for rank ", opt$peak_rank, " (only ", 
@@ -269,7 +275,16 @@ best_peaks <- selected_peaks
 # Track which genes get selected peaks
 genes_with_best_peaks <- unique(best_peaks$gene_id)
 all_genes_qc$is_best_peak[all_genes_qc$gene_id %in% genes_with_best_peaks] <- TRUE
-rank_description <- if(opt$peak_rank == 1) "best peak" else if(opt$peak_rank == 2) "second-best peak" else paste0(opt$peak_rank, "th-ranked peak")
+# Create proper ordinal description for any rank
+get_ordinal <- function(n) {
+  if (n %% 100 %in% 11:13) return(paste0(n, "th"))  # Special case for 11th, 12th, 13th
+  switch(n %% 10, 
+         "1" = paste0(n, "st"), 
+         "2" = paste0(n, "nd"), 
+         "3" = paste0(n, "rd"), 
+         paste0(n, "th"))
+}
+rank_description <- if(opt$peak_rank == 1) "best peak" else if(opt$peak_rank == 2) "second-best peak" else paste0(get_ordinal(opt$peak_rank), "-ranked peak")
 all_genes_qc$failure_reason[all_genes_qc$gene_id %in% genes_with_best_peaks] <- paste0("Selected as ", rank_description, " (by ", opt$peak_selection_metric, ")")
 
 # Store best peak statistics
@@ -575,10 +590,47 @@ if(length(target_regions) > 0) {
 
 # Write output files
 
+# Generate detailed peak availability summary
+cat("\n=== PEAK AVAILABILITY SUMMARY ===\n")
+cat("Requested peak rank:", opt$peak_rank, "\n")
+
+# Analyze peak distribution
+if(exists("ordered_peaks") && nrow(ordered_peaks) > 0) {
+  peak_counts_per_gene <- table(ordered_peaks$gene_id)
+  
+  cat("Peak distribution across genes with overlapping peaks:\n")
+  peak_dist_table <- table(peak_counts_per_gene)
+  for(i in 1:length(peak_dist_table)) {
+    n_peaks <- as.numeric(names(peak_dist_table)[i])
+    n_genes <- peak_dist_table[i]
+    cat("  ", n_genes, "genes have", n_peaks, "overlapping peak(s)\n")
+  }
+  
+  # Show which genes could support higher ranks
+  genes_with_multiple_peaks <- peak_counts_per_gene[peak_counts_per_gene > 1]
+  if(length(genes_with_multiple_peaks) > 0) {
+    cat("Genes with multiple peaks (supporting alternative rankings):\n")
+    for(gene in names(genes_with_multiple_peaks)) {
+      n_peaks <- genes_with_multiple_peaks[gene]
+      cat("  ", gene, ":", n_peaks, "peaks (supports ranks 1 to", n_peaks, ")\n")
+    }
+  }
+  
+  # Summary for the specific requested rank
+  genes_supporting_rank <- sum(peak_counts_per_gene >= opt$peak_rank)
+  cat("Summary for rank", opt$peak_rank, ":\n")
+  cat("  ", genes_supporting_rank, "out of", length(peak_counts_per_gene), "genes have sufficient peaks\n")
+  
+  if(genes_supporting_rank < length(peak_counts_per_gene)) {
+    insufficient_genes <- length(peak_counts_per_gene) - genes_supporting_rank
+    cat("  ", insufficient_genes, "genes have insufficient peaks for this rank\n")
+  }
+}
+
 # Write comprehensive QC report (all genes, not just selected ones)
 write.table(all_genes_qc, file = opt$out_qc, sep = "\t", quote = FALSE, row.names = FALSE)
 
-cat("Process completed successfully!\n")
+cat("\nProcess completed successfully!\n")
 cat("Output files:\n")
 cat("- FASTA:", opt$out_fa, "\n")
 cat("- BED:", opt$out_bed, "\n")

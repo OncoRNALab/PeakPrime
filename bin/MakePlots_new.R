@@ -457,21 +457,43 @@ plot_gene_with_window <- function(
         geom_rect(data = cds_df,
                   aes(xmin = xmin, xmax = xmax, ymin = y + 0.1, ymax = y + 0.7),
                   fill = "steelblue", alpha = 0.8) else NULL } +
-    # UTRs (on top of gray background, narrower than CDS)
+    # UTRs (on top of gray background, narrower than CDS) - Enhanced for small UTR visibility
     { if (nrow(utr_df)) {
         # 5' UTRs in light blue, 3' UTRs in orange
         utr_5prime <- utr_df[utr_type == "five_prime_utr"]
         utr_3prime <- utr_df[utr_type == "three_prime_utr"]
         
+        # Enhance visibility for small UTRs
+        enhance_small_utrs <- function(dt) {
+          if (nrow(dt) == 0) return(dt)
+          dt <- copy(dt)
+          utr_widths <- dt$xmax - dt$xmin + 1
+          min_visual_width <- 50  # minimum bp for visibility
+          
+          for (i in seq_len(nrow(dt))) {
+            if (utr_widths[i] < min_visual_width) {
+              center <- (dt$xmin[i] + dt$xmax[i]) / 2
+              dt$xmin[i] <- center - min_visual_width/2
+              dt$xmax[i] <- center + min_visual_width/2
+            }
+          }
+          return(dt)
+        }
+        
+        utr_5prime_enhanced <- enhance_small_utrs(utr_5prime)
+        utr_3prime_enhanced <- enhance_small_utrs(utr_3prime)
+        
+
+        
         list(
           if (nrow(utr_5prime))
-            geom_rect(data = utr_5prime,
-                      aes(xmin = xmin, xmax = xmax, ymin = y + 0.25, ymax = y + 0.55),
-                      fill = "lightblue", alpha = 0.9, color = "darkblue", linewidth = 0.3),
+            geom_rect(data = utr_5prime_enhanced,
+                      aes(xmin = xmin, xmax = xmax, ymin = y + 0.2, ymax = y + 0.6),
+                      fill = "lightblue", alpha = 0.95, color = "darkblue", linewidth = 0.5),
           if (nrow(utr_3prime))
-            geom_rect(data = utr_3prime,
-                      aes(xmin = xmin, xmax = xmax, ymin = y + 0.25, ymax = y + 0.55),
-                      fill = "orange", alpha = 0.9, color = "darkorange", linewidth = 0.3)
+            geom_rect(data = utr_3prime_enhanced,
+                      aes(xmin = xmin, xmax = xmax, ymin = y + 0.2, ymax = y + 0.6),
+                      fill = "orange", alpha = 0.95, color = "darkorange", linewidth = 0.5)
         )
       } else NULL } +
     # introns

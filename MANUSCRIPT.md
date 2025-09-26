@@ -265,7 +265,7 @@ PRIMER_MAX_TM=63.0
 - `--min_exonic_fraction`: Minimum exonic overlap (0-1, optional)
 - `--trim_to_exon`: Trim targets to exon boundaries (true/false)
 - `--peak_selection_metric`: Metric for selecting best peak ('score' or 'qvalue')
-- `--peak_rank`: Which ranked peak to select (1 for best, 2 for second-best, etc.)
+- `--peak_rank`: Which ranked peak to select (any positive integer: 1 for best, 2 for second-best, 3 for third-best, etc.)
 
 #### 3.3.3 Quality Control Parameters
 - `--search_slop`: Extra bases for BigWig import (default: 1000)
