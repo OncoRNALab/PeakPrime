@@ -29,6 +29,8 @@ opt_list <- list(
   make_option("--peak_rank", type="integer", default=1, help="Which ranked peak to select per gene: 1 for best, 2 for second-best, etc."),
   make_option("--min_exonic_fraction", type="character", default="NA", help="Minimum exonic fraction (or NA to disable)"),
   make_option("--trim_to_exon", type="character", default="false", help="Trim peaks to exon boundaries"),
+  make_option("--force_exonic_trimming", type="character", default="false", help="Force trimming to exon+UTR boundaries for primer safety"),
+  make_option("--min_trimmed_length", type="integer", default=150, help="Minimum length of trimmed region for primer design (bp)"),
   make_option("--out_fa", type="character", help="Output FASTA file"),
   make_option("--out_bed", type="character", help="Output BED file"),
   make_option("--out_peaks", type="character", help="Output peaks TSV file"),
@@ -46,6 +48,8 @@ if (!is.null(opt$pvalue_threshold)) {
 # Parse parameters
 min_exonic_fraction <- if(opt$min_exonic_fraction == "NA") NA_real_ else as.numeric(opt$min_exonic_fraction)
 trim_to_exon <- opt$trim_to_exon == "true"
+force_exonic_trimming <- opt$force_exonic_trimming == "true"
+min_trimmed_length <- opt$min_trimmed_length
 
 # Validate peak selection metric
 valid_metrics <- c("score", "qvalue")
@@ -308,6 +312,13 @@ target_regions <- GRanges(
 
 cat("Calculating exonic fractions...\n")
 
+if(force_exonic_trimming) {
+  cat("FORCED EXONIC TRIMMING ENABLED: All peaks will be trimmed to exon+UTR boundaries for primer safety\n")
+  cat("Minimum trimmed length:", min_trimmed_length, "bp\n")
+} else if(trim_to_exon) {
+  cat("Conditional exonic trimming enabled (original behavior)\n")
+}
+
 # Calculate exonic fraction for each target region
 exonic_fractions <- numeric(length(target_regions))
 trimmed_to_exon <- logical(length(target_regions))
@@ -329,37 +340,77 @@ for(i in seq_along(target_regions)) {
       exonic_fractions[i] <- 0
     }
     
-    # Trim to exon if requested
-    if(trim_to_exon) {
-      summit_pos <- target_regions$summit_pos[i]
-      containing_exons <- exons[summit_pos >= start(exons) & summit_pos <= end(exons)]
-      if(length(containing_exons) > 0) {
-        # Use the first containing exon
-        exon_range <- containing_exons[1]
-        new_start <- max(start(target_regions[i]), start(exon_range))
-        new_end <- min(end(target_regions[i]), end(exon_range))
+    # Trim to exon if requested OR force trimming is enabled
+    if(trim_to_exon || force_exonic_trimming) {
+      # Force trimming: Always trim to largest overlapping exonic region
+      if(force_exonic_trimming && length(overlaps_exon) > 0) {
+        # Find all overlapping exonic regions
+        overlapping_exons <- exons[subjectHits(overlaps_exon)]
+        intersect_ranges_all <- intersect(target_regions[i], overlapping_exons)
         
-        # Update the target region
-        target_regions[i] <- GRanges(
-          seqnames = seqnames(target_regions[i]),
-          ranges = IRanges(start = new_start, end = new_end),
-          strand = strand(target_regions[i]),
-          gene_id = gene_id,
-          peak_score = target_regions$peak_score[i],
-          peak_pvalue = target_regions$peak_pvalue[i],
-          peak_qvalue = target_regions$peak_qvalue[i],
-          summit_pos = summit_pos
-        )
-        
-        trimmed_to_exon[i] <- TRUE
-        
-        # Recalculate exonic fraction
-        overlaps_exon_new <- findOverlaps(target_regions[i], exons)
-        if(length(overlaps_exon_new) > 0) {
-          intersect_ranges_new <- intersect(target_regions[i], exons[subjectHits(overlaps_exon_new)])
-          exonic_fractions[i] <- sum(width(intersect_ranges_new)) / width(target_regions[i])
-        } else {
-          exonic_fractions[i] <- 0
+        if(length(intersect_ranges_all) > 0) {
+          # Use the largest continuous exonic region
+          largest_exonic <- intersect_ranges_all[which.max(width(intersect_ranges_all))]
+          
+          new_start <- start(largest_exonic)
+          new_end <- end(largest_exonic)
+          
+          # Ensure minimum trimmed length
+          trimmed_length <- new_end - new_start + 1
+          if(trimmed_length >= min_trimmed_length) {
+            # Update the target region with trimmed coordinates
+            target_regions[i] <- GRanges(
+              seqnames = seqnames(target_regions[i]),
+              ranges = IRanges(start = new_start, end = new_end),
+              strand = strand(target_regions[i]),
+              gene_id = gene_id,
+              peak_score = target_regions$peak_score[i],
+              peak_pvalue = target_regions$peak_pvalue[i],
+              peak_qvalue = target_regions$peak_qvalue[i],
+              summit_pos = target_regions$summit_pos[i]
+            )
+            
+            trimmed_to_exon[i] <- TRUE
+            # Exonic fraction is now 1.0 by definition (100% exonic after trimming)
+            exonic_fractions[i] <- 1.0
+          } else {
+            # Trimmed region too short - keep original but flag as failed
+            cat("Warning: Gene", gene_id, "trimmed region too short (", trimmed_length, "bp < ", min_trimmed_length, "bp)\n")
+            trimmed_to_exon[i] <- FALSE
+          }
+        }
+      } else if(trim_to_exon) {
+        # Original trimming logic (based on summit position)
+        summit_pos <- target_regions$summit_pos[i]
+        containing_exons <- exons[summit_pos >= start(exons) & summit_pos <= end(exons)]
+        if(length(containing_exons) > 0) {
+          # Use the first containing exon
+          exon_range <- containing_exons[1]
+          new_start <- max(start(target_regions[i]), start(exon_range))
+          new_end <- min(end(target_regions[i]), end(exon_range))
+          
+          # Update the target region
+          target_regions[i] <- GRanges(
+            seqnames = seqnames(target_regions[i]),
+            ranges = IRanges(start = new_start, end = new_end),
+            strand = strand(target_regions[i]),
+            gene_id = gene_id,
+            peak_score = target_regions$peak_score[i],
+            peak_pvalue = target_regions$peak_pvalue[i],
+            peak_qvalue = target_regions$peak_qvalue[i],
+            summit_pos = summit_pos
+          )
+          
+          trimmed_to_exon[i] <- TRUE
+          
+          # Recalculate exonic fraction
+          overlaps_exon_new <- findOverlaps(target_regions[i], exons)
+          if(length(overlaps_exon_new) > 0) {
+            intersect_ranges_new <- intersect(target_regions[i], exons[subjectHits(overlaps_exon_new)])
+            exonic_fractions[i] <- sum(width(intersect_ranges_new)) / width(target_regions[i])
+          } else {
+            exonic_fractions[i] <- 0
+          }
         }
       }
     }
@@ -381,8 +432,25 @@ target_regions$trimmed_to_exon <- trimmed_to_exon
 # Track genes that pass exonic filter
 all_genes_qc$passes_exonic_filter[all_genes_qc$gene_id %in% target_regions$gene_id] <- TRUE
 
-# Filter by minimum exonic fraction if specified
-if(!is.na(min_exonic_fraction)) {
+# Special handling for forced trimming failures
+if(force_exonic_trimming) {
+  # Filter out peaks that failed forced trimming (no exonic overlap or too short after trimming)
+  failed_trimming <- target_regions$gene_id[!trimmed_to_exon & exonic_fractions == 0]
+  if(length(failed_trimming) > 0) {
+    keep_idx <- !(target_regions$gene_id %in% failed_trimming)
+    genes_before_trimming <- target_regions$gene_id
+    target_regions <- target_regions[keep_idx]
+    
+    # Update QC for genes that failed forced trimming
+    all_genes_qc$passes_exonic_filter[all_genes_qc$gene_id %in% failed_trimming] <- FALSE
+    all_genes_qc$failure_reason[all_genes_qc$gene_id %in% failed_trimming] <- "Failed forced exonic trimming (no exonic overlap or trimmed region too short)"
+    
+    cat("Removed", length(failed_trimming), "genes due to failed forced exonic trimming\n")
+  }
+}
+
+# Filter by minimum exonic fraction if specified (skip if force trimming is enabled)
+if(!is.na(min_exonic_fraction) && !force_exonic_trimming) {
   keep_idx <- exonic_fractions >= min_exonic_fraction
   genes_before_filter <- target_regions$gene_id
   target_regions <- target_regions[keep_idx]
@@ -400,7 +468,11 @@ if(!is.na(min_exonic_fraction)) {
   cat("Retained", length(target_regions), "regions after exonic fraction filtering\n")
 } else {
   # No exonic filtering - all genes with best peaks pass
-  all_genes_qc$failure_reason[all_genes_qc$gene_id %in% target_regions$gene_id] <- "Passed all filters"
+  if(force_exonic_trimming) {
+    all_genes_qc$failure_reason[all_genes_qc$gene_id %in% target_regions$gene_id] <- "Passed all filters (forced exonic trimming applied)"
+  } else {
+    all_genes_qc$failure_reason[all_genes_qc$gene_id %in% target_regions$gene_id] <- "Passed all filters"
+  }
 }
 
 # Mark final selections

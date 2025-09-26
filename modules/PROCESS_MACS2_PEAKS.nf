@@ -29,6 +29,8 @@ process PROCESS_MACS2_PEAKS {
         --peak_rank ${params.peak_rank ?: 1} \\
         --min_exonic_fraction ${params.min_exonic_fraction ?: 'NA'} \\
         --trim_to_exon ${params.trim_to_exon ? 'true' : 'false'} \\
+        --force_exonic_trimming ${params.force_exonic_trimming ? 'true' : 'false'} \\
+        --min_trimmed_length ${params.min_trimmed_length ?: 150} \\
         --out_fa selected_peaks.fa \\
         --out_bed selected_peaks.bed \\
         --out_peaks selected_peaks.tsv \\

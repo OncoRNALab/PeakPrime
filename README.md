@@ -178,9 +178,13 @@ macs2 callpeak -t file.bam -g hs --bdg --keep-dup auto -q 0.05 --nomodel --extsi
 |-----------|---------|-------------|
 | `--min_exonic_fraction` | null | Minimum required exonic fraction (0-1) |
 | `--trim_to_exon` | false | Trim final window to exon containing the peak |
+| `--force_exonic_trimming` | true | **Force trimming to exon+UTR boundaries for primer safety** |
+| `--min_trimmed_length` | 150 | Minimum length of trimmed region for primer design (bp) |
 | `--search_slop` | 1000 | Extra bases for BigWig import |
 
 > **📝 Note**: This pipeline uses MACS2 for statistically rigorous peak calling. Legacy parameters from previous derfinder-based implementations (`pad`, `smooth_k`, `sliding_window`, `trim_low_coverage_pct`) are no longer used in the current workflow architecture.
+
+> **🔒 Primer Safety**: By default, `--force_exonic_trimming` is enabled to ensure all primers target transcribed regions only, never regulatory DNA upstream/downstream of genes. This prevents primers from binding to enhancers, promoters, or other regulatory elements. To disable this safety feature, set `--force_exonic_trimming false`.
 
 ### Transcriptome Alignment QC (Optional)
 | Parameter | Description |
