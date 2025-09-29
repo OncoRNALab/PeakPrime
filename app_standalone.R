@@ -1,11 +1,12 @@
 #!/usr/bin/env Rscript
 
-# PeakPrime Hybrid Explorer - Ultra-fast loading with full plotting features
-# Combines the speed of ultra-fast mode with comprehensive plot_gene_with_window functionality
+# PeakPrime Standalone Explorer - Run from anywhere, point to any results directory
+# Full plotting features with proper separated layout (coverage + gene structure)
 #
 # Usage:
-#   1. Run preprocess_data_hybrid.R once to create enhanced preprocessed files
-#   2. Launch this app with: shiny::runApp("app_hybrid.R")
+#   Rscript app_standalone.R /path/to/results/directory
+#   OR
+#   Rscript app_standalone.R  # Will prompt for directory
 
 suppressPackageStartupMessages({
   library(shiny)
@@ -18,66 +19,159 @@ suppressPackageStartupMessages({
 })
 
 # ==============================================================================
-# DATA LOADING AND INITIALIZATION
+# UTILITY FUNCTIONS
 # ==============================================================================
 
-# Check for preprocessed data
-if (!file.exists("data_manifest.rds")) {
-  stop("❌ No preprocessed data found!\n",
-       "Run preprocess_data_hybrid.R first to generate required data files.\n",
-       "This will include GTF annotations which are mandatory for proper visualization.")
+# Function to setup logo with automatic copying and resource path
+setup_logo_resources <- function(results_dir) {
+  # Check if logo exists in app www directory (primary source)
+  app_logo <- "www/logo2.png"
+  
+  if (file.exists(app_logo)) {
+    # Option 1: Try to set up resource path to results directory
+    results_www <- file.path(results_dir, "www")
+    
+    # Create results www directory if it doesn't exist
+    if (!dir.exists(results_www)) {
+      dir.create(results_www, recursive = TRUE, showWarnings = FALSE)
+    }
+    
+    # Copy logo to results directory for proper serving
+    results_logo <- file.path(results_www, "logo2.png")
+    if (!file.exists(results_logo) || 
+        file.info(app_logo)$mtime > file.info(results_logo)$mtime) {
+      file.copy(app_logo, results_logo, overwrite = TRUE)
+      cat("📁 Logo copied to results directory:", results_www, "\n")
+    }
+    
+    # Set up resource path
+    addResourcePath("logo", results_www)
+    cat("📁 Logo resources configured from results directory\n")
+    return("logo/logo2.png")
+    
+  } else if (file.exists("logo2.png")) {
+    # Fallback: logo in app root directory
+    dir.create("www", showWarnings = FALSE)
+    file.copy("logo2.png", "www/logo2.png", overwrite = TRUE)
+    cat("📁 Logo copied from app root to www directory\n")
+    return("logo2.png")
+    
+  } else {
+    cat("⚠️ Logo not found, using text fallback\n")
+    return(NULL)
+  }
 }
 
-# Load all preprocessed data instantly
-cat("🚀 Loading preprocessed data...\n")
+# Function to get logo element
+get_logo_element <- function(logo_src = NULL) {
+  if (!is.null(logo_src)) {
+    return(tags$img(src = logo_src, height = "80px", style = "margin-right: 25px;"))
+  } else {
+    # Fallback to text/emoji logo
+    return(tags$span("🧬 PeakPrime", 
+                     style = "font-size: 24px; font-weight: bold; color: #2c3e50; margin-right: 15px;"))
+  }
+}
+
+# ==============================================================================
+# DIRECTORY SELECTION
+# ==============================================================================
+
+# Get results directory from command line or user input
+args <- commandArgs(trailingOnly = TRUE)
+
+if (length(args) > 0) {
+  results_dir <- args[1]
+} else {
+  # Interactive directory selection
+  cat("=== PeakPrime Standalone Explorer ===\n")
+  cat("Enter the path to your results directory:\n")
+  cat("(e.g., /path/to/results/testboth or results/Class1)\n")
+  results_dir <- readline("Results directory: ")
+}
+
+# Validate directory
+if (!dir.exists(results_dir)) {
+  stop("❌ Directory does not exist: ", results_dir)
+}
+
+# Convert to absolute path and store original working directory
+results_dir <- normalizePath(results_dir, mustWork = TRUE)
+original_wd <- getwd()
+
+cat("📁 Using results directory:", results_dir, "\n")
+
+# Check for preprocessed data
+manifest_file <- file.path(results_dir, "data_manifest.rds")
+if (!file.exists(manifest_file)) {
+  cat("❌ No preprocessed data found in:", results_dir, "\n")
+  cat("💡 Run preprocess_for_standalone.R first:\n")
+  cat("   source('preprocess_for_standalone.R')\n")
+  cat("   preprocess_peakprime_standalone('", results_dir, "', '/path/to/gtf')\n")
+  stop("Preprocessing required")
+}
+
+# ==============================================================================
+# DATA LOADING FROM RESULTS DIRECTORY
+# ==============================================================================
+
+# Load all preprocessed data from results directory
+cat("🚀 Loading preprocessed data from:", results_dir, "\n")
 start_time <- Sys.time()
 
-manifest <- readRDS("data_manifest.rds")
-qc_data_raw <- readRDS("qc_data.rds")
-selected_peaks <- if (file.exists("peaks_data.rds")) readRDS("peaks_data.rds") else NULL
-gtf_data <- if (file.exists("gtf_data.rds")) readRDS("gtf_data.rds") else NULL
-coverage_index <- if (file.exists("coverage_index.rds")) readRDS("coverage_index.rds") else NULL
+manifest <- readRDS(file.path(results_dir, "data_manifest.rds"))
+qc_data_raw <- readRDS(file.path(results_dir, "qc_data.rds"))
+selected_peaks <- if (file.exists(file.path(results_dir, "peaks_data.rds"))) {
+  readRDS(file.path(results_dir, "peaks_data.rds"))
+} else NULL
+gtf_data <- if (file.exists(file.path(results_dir, "gtf_data.rds"))) {
+  readRDS(file.path(results_dir, "gtf_data.rds"))
+} else NULL
+coverage_index <- if (file.exists(file.path(results_dir, "coverage_index.rds"))) {
+  readRDS(file.path(results_dir, "coverage_index.rds"))
+} else NULL
 
 # Load all peaks data if available
 all_peaks_data <- NULL
-if (file.exists("macs2_peaks/Merged_S7_S12_peaks.narrowPeak")) {
+narrowpeak_file <- list.files(file.path(results_dir, "macs2_peaks"), 
+                             pattern = "_peaks\\.narrowPeak$", 
+                             full.names = TRUE)[1]
+if (!is.na(narrowpeak_file) && file.exists(narrowpeak_file)) {
   cat("📈 Loading all detected peaks data...\n")
-  all_peaks_raw <- fread("macs2_peaks/Merged_S7_S12_peaks.narrowPeak", 
+  all_peaks_raw <- fread(narrowpeak_file, 
                         header = FALSE, 
                         col.names = c("chr", "start", "end", "name", "score", 
                                      "strand", "fold_change", "pvalue", "qvalue", "summit_offset"))
   
   # Process peaks into gene-indexed structure
   if (nrow(all_peaks_raw) > 0) {
-    # Load GTF to map peaks to genes
-    if (file.exists("processed_peaks/peaks_qc_summary.tsv")) {
-      qc_summary <- fread("processed_peaks/peaks_qc_summary.tsv")
+    # Use QC data to map peaks to genes
+    qc_summary <- qc_data_raw
+    
+    # Create a mapping structure: gene_id -> list of all peaks
+    all_peaks_data <- list()
+    
+    for (i in 1:nrow(qc_summary)) {
+      gene_id <- qc_summary$gene_id[i]
+      gene_chr <- qc_summary$gene_chr[i]
+      gene_start <- qc_summary$gene_start[i]
+      gene_end <- qc_summary$gene_end[i]
       
-      # Create a mapping structure: gene_id -> list of all peaks
-      all_peaks_data <- list()
+      # Find all peaks overlapping this gene
+      gene_peaks <- all_peaks_raw[
+        chr == gene_chr & 
+        end >= gene_start & 
+        start <= gene_end
+      ]
       
-      for (i in 1:nrow(qc_summary)) {
-        gene_id <- qc_summary$gene_id[i]
-        gene_chr <- qc_summary$gene_chr[i]
-        gene_start <- qc_summary$gene_start[i]
-        gene_end <- qc_summary$gene_end[i]
-        
-        # Find all peaks overlapping this gene
-        gene_peaks <- all_peaks_raw[
-          chr == gene_chr & 
-          end >= gene_start & 
-          start <= gene_end
-        ]
-        
-        if (nrow(gene_peaks) > 0) {
-          # Sort peaks by score (best first)
-          gene_peaks <- gene_peaks[order(-score)]
-          all_peaks_data[[gene_id]] <- gene_peaks
-        }
+      if (nrow(gene_peaks) > 0) {
+        # Sort peaks by score (best first)
+        gene_peaks <- gene_peaks[order(-score)]
+        all_peaks_data[[gene_id]] <- gene_peaks
       }
-      
-      cat("   Processed peaks for", length(all_peaks_data), "genes\n")
     }
+    
+    cat("   Processed peaks for", length(all_peaks_data), "genes\n")
   }
 }
 
@@ -87,6 +181,11 @@ cat("📋 Converted data.table to data.frame for reliable filtering\n")
 
 load_time <- Sys.time() - start_time
 cat("⚡ Loaded", nrow(qc_data), "genes in", format(load_time, digits = 2), "\n")
+
+# Store source information for UI display
+source_info <- paste0("📂 Source: ", basename(results_dir), 
+                     "\n📄 GTF: ", basename(manifest$gtf_path %||% "Unknown"),
+                     "\n⏱️ Processed: ", format(manifest$processed_time, "%Y-%m-%d %H:%M"))
 
 # ==============================================================================
 # ENHANCED PLOTTING FUNCTIONS
@@ -153,9 +252,17 @@ extract_gene_info <- function(gene_id, gtf_data, max_transcripts = 20) {
     transcripts <- head(transcripts, max_transcripts)
   }
   
+  # Get gene strand information
+  gene_strand <- if (length(gene_features) > 0) {
+    strand_info <- as.character(strand(gene_features))[1]
+    if (is.na(strand_info) || strand_info == "*") "+" else strand_info
+  } else {
+    "+"  # Default to positive strand
+  }
+  
   cat("Found", length(transcripts), "transcripts for gene", gene_id, "(including non-coding)\n")
   
-  list(exons = exons, cds = cds, utrs = utrs, transcripts = transcripts)
+  list(exons = exons, cds = cds, utrs = utrs, transcripts = transcripts, gene_strand = gene_strand)
 }
 
 #' Get all detected peaks for a gene
@@ -170,7 +277,7 @@ get_all_peaks <- function(gene_id, all_peaks_data, max_peaks = 5) {
 }
 
 #' Create comprehensive gene plot with full features
-plot_gene_comprehensive <- function(gene_id, qc_data, yaxis_mode = "depth", 
+plot_gene_comprehensive <- function(gene_id, qc_data, all_peaks_data, yaxis_mode = "depth", 
                                   show_primers = TRUE, max_isoforms = 5,
                                   show_peak_region = TRUE, show_all_peaks = FALSE, 
                                   max_peaks = 3) {
@@ -197,10 +304,39 @@ plot_gene_comprehensive <- function(gene_id, qc_data, yaxis_mode = "depth",
   
   # Debug: print gene coordinates for troubleshooting
   cat("Gene:", gene_id, "\n")
-  cat("Selected/Trimmed peak coords:", peak_start_coord, "-", peak_end_coord, "\n")
+  cat("QC data peak coords:", peak_start_coord, "-", peak_end_coord, "\n")
   cat("Gene coords:", gene_start_coord, "-", gene_end_coord, "\n")
   
-  # Note: peak_start_coord and peak_end_coord represent the TRIMMED/SELECTED peak
+  # Store the trimmed coordinates from QC data (for highlighting)
+  trimmed_peak_start <- peak_start_coord
+  trimmed_peak_end <- peak_end_coord
+  
+  # Always get original MACS2 peaks for display in peak bars
+  original_peaks <- get_all_peaks(gene_id, all_peaks_data, max_peaks = 10)
+  
+  # Determine what to use for highlighting vs peak display
+  peak_was_trimmed <- (peak_start_coord != gene_start_coord || peak_end_coord != gene_end_coord)
+  
+  if (peak_was_trimmed) {
+    cat("Trimming detected - Using separate coordinates:\n")
+    cat("  Trimmed region (for highlighting):", trimmed_peak_start, "-", trimmed_peak_end, "\n")
+    cat("  Gene boundaries:", gene_start_coord, "-", gene_end_coord, "\n")
+    if (nrow(original_peaks) > 0) {
+      cat("  Original MACS2 peak (for bars):", original_peaks$start[1], "-", original_peaks$end[1], "\n")
+    }
+  } else {
+    cat("No trimming detected - peak coords match gene coords or using MACS2 coords\n")
+    if (nrow(original_peaks) > 0) {
+      cat("Using MACS2 peak coords:", original_peaks$start[1], "-", original_peaks$end[1], "\n")
+      # For highlighting, use MACS2 coordinates when no trimming was applied
+      trimmed_peak_start <- original_peaks$start[1]  
+      trimmed_peak_end <- original_peaks$end[1]
+    } else {
+      cat("No MACS2 peaks found, using QC data coordinates for both\n")
+    }
+  }
+  
+  # Note: peak_start_coord and peak_end_coord now represent the actual peak region
   # These should be used for highlighting (primer design region)
   # All MACS2 peaks will be displayed via the all_peaks system
   
@@ -223,11 +359,33 @@ plot_gene_comprehensive <- function(gene_id, qc_data, yaxis_mode = "depth",
     plot_end <- gene_end_coord
   }
   
-  # CRITICAL FIX: Expand plot window to always include peak coordinates
+  # CRITICAL FIX: Find original MACS2 peak coordinates and expand plot window
+  original_macs2_start <- peak_start_coord  # Default to trimmed coordinates
+  original_macs2_end <- peak_end_coord
+  
+  # Find the original MACS2 peak that overlaps with the selected region
   if (!is.na(peak_start_coord) && !is.na(peak_end_coord)) {
-    plot_start <- min(plot_start, peak_start_coord)
-    plot_end <- max(plot_end, peak_end_coord)
-    cat("Expanded plot window to include peak: ", plot_start, "-", plot_end, "\\n")
+    all_peaks_for_gene <- get_all_peaks(gene_id, all_peaks_data, max_peaks)
+    
+    if (nrow(all_peaks_for_gene) > 0) {
+      for (i in 1:nrow(all_peaks_for_gene)) {
+        macs2_start <- all_peaks_for_gene$start[i]
+        macs2_end <- all_peaks_for_gene$end[i]
+        
+        # Check for overlap between MACS2 peak and selected region
+        if (!(macs2_end < peak_start_coord || macs2_start > peak_end_coord)) {
+          original_macs2_start <- macs2_start
+          original_macs2_end <- macs2_end
+          cat("Found overlapping MACS2 peak for plot expansion:", macs2_start, "-", macs2_end, "\n")
+          break
+        }
+      }
+    }
+    
+    # Expand plot window to include the ORIGINAL MACS2 peak (not just trimmed region)
+    plot_start <- min(plot_start, original_macs2_start)
+    plot_end <- max(plot_end, original_macs2_end)
+    cat("Expanded plot window to include MACS2 peak: ", plot_start, "-", plot_end, "\n")
   }
   
   # CRITICAL FIX: Expand plot window to include ALL UTRs (fixes missing UTR display)
@@ -304,14 +462,14 @@ plot_gene_comprehensive <- function(gene_id, qc_data, yaxis_mode = "depth",
   
   # Add TRIMMED peak region highlight (primer design region)
   # This highlights only the selected/trimmed peak, not the full MACS2 peak
-  if (show_peak_region && !is.na(peak_start_coord) && !is.na(peak_end_coord)) {
+  if (show_peak_region && !is.na(trimmed_peak_start) && !is.na(trimmed_peak_end)) {
     p_cov <- p_cov + 
       annotate("rect", 
-              xmin = peak_start_coord, 
-              xmax = peak_end_coord,
+              xmin = trimmed_peak_start, 
+              xmax = trimmed_peak_end,
               ymin = -Inf, ymax = Inf, 
               alpha = 0.3, fill = "yellow", color = "orange", linewidth = 0.8) +
-      annotate("text", x = (peak_start_coord + peak_end_coord) / 2, y = Inf, 
+      annotate("text", x = (trimmed_peak_start + trimmed_peak_end) / 2, y = Inf, 
               label = "TRIMMED PEAK\n(Primer Region)", vjust = 1.2, size = 3, 
               color = "darkred", fontface = "bold")
   }
@@ -341,11 +499,11 @@ plot_gene_comprehensive <- function(gene_id, qc_data, yaxis_mode = "depth",
   peak_track <- primer_track + 1
   
   # Add TRIMMED peak region highlight to gene structure (primer design region)
-  if (show_peak_region && !is.na(peak_start_coord) && !is.na(peak_end_coord)) {
+  if (show_peak_region && !is.na(trimmed_peak_start) && !is.na(trimmed_peak_end)) {
     p_feat <- p_feat + 
       annotate("rect",
-              xmin = peak_start_coord,
-              xmax = peak_end_coord, 
+              xmin = trimmed_peak_start,
+              xmax = trimmed_peak_end, 
               ymin = 0.5, ymax = peak_track + 0.5,
               alpha = 0.3, fill = "yellow", color = "orange", linewidth = 0.8)
   }
@@ -580,18 +738,22 @@ plot_gene_comprehensive <- function(gene_id, qc_data, yaxis_mode = "depth",
     }
   }
   
-  # Add primer annotations - ALWAYS draw if coordinates exist
-  peak_start_val <- peak_start_coord
-  peak_end_val <- peak_end_coord
+  # Add primer annotations - use trimmed coordinates for primer positioning
+  peak_start_val <- trimmed_peak_start
+  peak_end_val <- trimmed_peak_end
   
   cat("Checking primers: show_primers =", show_primers, "peak_start =", peak_start_val, "peak_end =", peak_end_val, "\n")
   
   if (show_primers && !is.na(peak_start_val) && !is.na(peak_end_val)) {
-    # Calculate primer position at SELECTED peak center (always use selected peak)
+    # Calculate primer position at TRIMMED peak center (primer design region)
     selected_peak_center <- (peak_start_val + peak_end_val) / 2
     
     # Determine primer direction based on gene strand (towards 3' end)
-    primer_direction <- ifelse(gene_strand == "-", "left", "right")  # - strand: 3' is left, + strand: 3' is right
+    primer_direction <- if (!is.null(gene_strand) && length(gene_strand) > 0 && gene_strand == "-") {
+      "left"  # - strand: 3' is left
+    } else {
+      "right"  # + strand: 3' is right (default)
+    }
     
     cat("Drawing single primer at SELECTED peak position:", selected_peak_center, "pointing", primer_direction, "(towards 3' end) on track", primer_track, "\n")
     
@@ -634,10 +796,10 @@ plot_gene_comprehensive <- function(gene_id, qc_data, yaxis_mode = "depth",
         peak_end_coord <- all_peaks$end[i]
         peak_score_val <- all_peaks$score[i]
         
-        # Check if this matches the selected peak (exact coordinate match)
+        # Check if this MACS2 peak overlaps with the selected/trimmed peak region
+        # This handles cases where the original MACS2 peak is larger than the trimmed region
         is_selected_peak <- (!is.na(peak_start_val) && !is.na(peak_end_val) &&
-                            abs(peak_start_coord - peak_start_val) < 50 && 
-                            abs(peak_end_coord - peak_end_val) < 50)
+                            !(peak_end_coord < peak_start_val || peak_start_coord > peak_end_val))
         
         if (is_selected_peak) {
           selected_peak_drawn <- TRUE
@@ -668,9 +830,9 @@ plot_gene_comprehensive <- function(gene_id, qc_data, yaxis_mode = "depth",
       }
     }
     
-    # If selected peak wasn't found in detected peaks, draw it separately
+    # If selected peak wasn't found in detected peaks, draw the trimmed region separately  
     if (!selected_peak_drawn && !is.na(peak_start_val) && !is.na(peak_end_val)) {
-      cat("Drawing selected peak separately (not in detected peaks list)\n")
+      cat("Drawing trimmed peak region separately (not overlapping with MACS2 peaks)\n")
       p_feat <- p_feat +
         annotate("rect", 
                 xmin = peak_start_val, xmax = peak_end_val,
@@ -679,9 +841,39 @@ plot_gene_comprehensive <- function(gene_id, qc_data, yaxis_mode = "depth",
                 color = "black", linewidth = 0.5)
     }
   } else {
-    # Draw only selected peak (original behavior)
-    if (!is.na(peak_start_val) && !is.na(peak_end_val)) {
-      cat("Drawing selected peak region from", peak_start_val, "to", peak_end_val, "on track", peak_track, "\n")
+    # Draw only selected peak using ORIGINAL MACS2 coordinates (not trimmed)
+    # Find the original MACS2 peak that overlaps with our selected region
+    all_peaks <- get_all_peaks(gene_id, all_peaks_data, max_peaks)
+    selected_macs2_peak <- NULL
+    
+    if (nrow(all_peaks) > 0 && !is.na(peak_start_val) && !is.na(peak_end_val)) {
+      # Find MACS2 peak that overlaps with selected region
+      for (i in 1:nrow(all_peaks)) {
+        peak_start_coord <- all_peaks$start[i]
+        peak_end_coord <- all_peaks$end[i]
+        
+        # Check for overlap between MACS2 peak and selected region
+        if (!(peak_end_coord < peak_start_val || peak_start_coord > peak_end_val)) {
+          selected_macs2_peak <- list(start = peak_start_coord, end = peak_end_coord)
+          break
+        }
+      }
+    }
+    
+    if (!is.null(selected_macs2_peak)) {
+      cat("Drawing selected MACS2 peak (original coordinates) from", 
+          selected_macs2_peak$start, "to", selected_macs2_peak$end, "on track", peak_track, "\n")
+      
+      p_feat <- p_feat +
+        annotate("rect", 
+                xmin = selected_macs2_peak$start, xmax = selected_macs2_peak$end,
+                ymin = peak_track - 0.4, ymax = peak_track + 0.4,
+                fill = "darkred", alpha = 0.9, 
+                color = "black", linewidth = 0.5)
+    } else if (!is.na(peak_start_val) && !is.na(peak_end_val)) {
+      # Fallback: if no MACS2 peak found, draw trimmed region
+      cat("No overlapping MACS2 peak found, drawing trimmed region from", 
+          peak_start_val, "to", peak_end_val, "on track", peak_track, "\n")
       
       p_feat <- p_feat +
         annotate("rect", 
@@ -723,16 +915,18 @@ plot_gene_comprehensive <- function(gene_id, qc_data, yaxis_mode = "depth",
 }
 
 # ==============================================================================
-# SHINY UI
+# SHINY UI SETUP
 # ==============================================================================
 
+# Setup logo resources early (before UI definition)
+logo_src <- setup_logo_resources(results_dir)
+
 ui <- fluidPage(
-  titlePanel(
-    div(style = "display: flex; align-items: center; margin-bottom: 20px;",
-        img(src = "logo2.png", height = "60px", style = "margin-right: 15px;"),
-        span("PeakPrime Explorer", style = "font-size: 28px; font-weight: bold;")
-    )
-  ),
+  titlePanel(div(
+    style = "display: flex; align-items: center; margin-bottom: 20px;",
+    get_logo_element(logo_src),  # Use configured logo source
+    span("PeakPrime Explorer", style = "font-size: 28px; font-weight: bold;")
+  )),
   
   tags$head(
     tags$style(HTML("
@@ -741,6 +935,11 @@ ui <- fluidPage(
         background: linear-gradient(45deg, #28a745, #20c997);
         color: white; padding: 5px 10px; border-radius: 15px;
         font-size: 0.8em; font-weight: bold;
+      }
+      .source-info {
+        background: linear-gradient(45deg, #6f42c1, #007bff);
+        color: white; padding: 8px 12px; border-radius: 10px;
+        font-size: 0.85em; margin-bottom: 15px;
       }
       .feature-badge {
         background: linear-gradient(45deg, #007bff, #6f42c1);
@@ -764,7 +963,9 @@ ui <- fluidPage(
       # Performance indicator
       div(class = "performance-badge", 
           paste("⚡ Loaded in", format(load_time, digits = 2))),
-      br(), br(),
+      br(),
+      div(class = "source-info", source_info),
+      br(),
       
       # Gene selection
       h4("🧬 Gene Selection"),
@@ -871,6 +1072,7 @@ server <- function(input, output, session) {
     plot_gene_comprehensive(
       gene_id = input$gene_id,
       qc_data = qc_data,
+      all_peaks_data = all_peaks_data,
       yaxis_mode = input$yaxis_mode,
       show_primers = input$show_primers,
       max_isoforms = input$max_isoforms,
@@ -954,16 +1156,38 @@ server <- function(input, output, session) {
 }
 
 # ==============================================================================
-# APP LAUNCH
+# LAUNCH APP
 # ==============================================================================
 
-# Run the application
-if (interactive()) {
-  cat("\n=== PeakPrime Hybrid Explorer ===\n")
-  cat("🚀 Ultra-fast loading + ⭐ Full features\n")
-  cat("Ready to explore", nrow(qc_data), "genes!\n\n")
+# Restore original working directory on exit
+on.exit(setwd(original_wd))
+
+cat("\n=== PeakPrime Standalone Explorer ===\n")
+cat("🚀 Ultra-fast loading + ⭐ Full features\n")
+cat("📁 Source:", results_dir, "\n")
+cat("Ready to explore", nrow(qc_data), "genes!\n\n")
+
+# Logo already configured in UI setup section
+
+# Create the Shiny app object
+app <- shinyApp(ui = ui, server = server)
+
+# Always make app available in global environment
+assign("peakprime_app", app, envir = globalenv())
+
+# Check if we should auto-launch
+auto_launch <- exists(".standalone_launch", envir = globalenv()) && 
+               get(".standalone_launch", envir = globalenv()) == TRUE
+
+if (auto_launch || !interactive()) {
+  cat("🚀 Launching Shiny app...\n")
+  cat("💡 The app will open in your browser or RStudio Viewer\n")
+  cat("🛑 Press Ctrl+C (or Escape in RStudio) to stop the app\n\n")
   
-  shinyApp(ui = ui, server = server)
+  # Run the app
+  runApp(app, launch.browser = TRUE)
 } else {
-  shinyApp(ui = ui, server = server)
+  cat("📝 App loaded successfully! Use one of these commands to launch:\n")
+  cat("   runApp(peakprime_app)                    # Launch immediately\n")
+  cat("   .standalone_launch <- TRUE; source(...)  # Auto-launch on next source\n\n")
 }

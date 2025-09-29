@@ -1,14 +1,15 @@
 #!/usr/bin/env Rscript
 
-# PeakPrime Enhanced Data Preprocessor for Hybrid App
-# Creates fast-loading binary data files with full plotting capabilities
+# PeakPrime Standalone Data Preprocessor
+# Creates fast-loading binary data files for standalone app
 #
-# This enhanced version includes:
+# This version includes:
 # - BigWig coverage data extraction for all genes
-# - Complete GTF processing with transcript structures
+# - Complete GTF processing with transcript structures  
 # - Optimized data structures for instant loading
+# - Flexible GTF path parameter
 #
-# Run this once, then use app_hybrid.R for ultra-fast + full-featured exploration
+# Usage: preprocess_peakprime_standalone("results/directory", "path/to/gtf")
 
 suppressPackageStartupMessages({
   library(data.table)
@@ -17,20 +18,57 @@ suppressPackageStartupMessages({
   library(IRanges)
 })
 
-#' Enhanced preprocessing for hybrid app with full features
-preprocess_peakprime_hybrid <- function(outdir = ".", 
-                                       max_coverage_points = 1000,
-                                       coverage_window_pad = 500) {
+#' Enhanced preprocessing for standalone app with flexible GTF path
+#' @param results_dir Path to results directory containing PeakPrime outputs
+#' @param gtf_path Path to GTF annotation file
+#' @param max_coverage_points Maximum coverage points per gene for performance
+#' @param coverage_window_pad Window padding for coverage extraction
+preprocess_peakprime_standalone <- function(results_dir, 
+                                           gtf_path = NULL,
+                                           max_coverage_points = 1000,
+                                           coverage_window_pad = 500) {
   
-  cat("🔍 Discovering PeakPrime files...\n")
+  # Validate and normalize results directory
+  if (!dir.exists(results_dir)) {
+    stop("❌ Results directory does not exist: ", results_dir)
+  }
   
-  # File discovery with robust pattern matching
+  results_dir <- normalizePath(results_dir, mustWork = TRUE)
+  cat("🔍 Discovering PeakPrime files in:", results_dir, "\n")
+  
+  # Auto-detect GTF if not provided
+  if (is.null(gtf_path)) {
+    # Try common GTF locations
+    gtf_candidates <- c(
+      "/data/gent/vo/000/gvo00027/resources/Ensembl_transcriptomes/Homo_sapiens/GRCh38/Homo_sapiens.GRCh38.109.chrIS_spikes_45S.gtf",
+      "~/annotations/Homo_sapiens.GRCh38.109.gtf",
+      "../annotations/Homo_sapiens.GRCh38.109.gtf"
+    )
+    
+    for (candidate in gtf_candidates) {
+      if (file.exists(candidate)) {
+        gtf_path <- candidate
+        cat("📄 Auto-detected GTF:", gtf_path, "\n")
+        break
+      }
+    }
+    
+    if (is.null(gtf_path)) {
+      stop("❌ No GTF file found. Please provide gtf_path parameter.")
+    }
+  }
+  
+  if (!file.exists(gtf_path)) {
+    stop("❌ GTF file does not exist: ", gtf_path)
+  }
+  
+  # File discovery with robust pattern matching in results directory
   files <- list(
-    qc_summary = list.files(".", pattern = "peaks_qc_summary\\.tsv$", recursive = TRUE, full.names = TRUE)[1],
-    selected_peaks = list.files(".", pattern = "selected_peaks\\.tsv$", recursive = TRUE, full.names = TRUE)[1],
-    bigwig = list.files(".", pattern = "\\.bw$", recursive = TRUE, full.names = TRUE)[1],
-    gtf = "/data/gent/vo/000/gvo00027/resources/Ensembl_transcriptomes/Homo_sapiens/GRCh38/Homo_sapiens.GRCh38.109.chrIS_spikes_45S.gtf",
-    narrowpeak = list.files(".", pattern = "_peaks\\.narrowPeak$", recursive = TRUE, full.names = TRUE)[1]
+    qc_summary = list.files(results_dir, pattern = "peaks_qc_summary\\.tsv$", recursive = TRUE, full.names = TRUE)[1],
+    selected_peaks = list.files(results_dir, pattern = "selected_peaks\\.tsv$", recursive = TRUE, full.names = TRUE)[1],
+    bigwig = list.files(results_dir, pattern = "\\.bw$", recursive = TRUE, full.names = TRUE)[1],
+    gtf = gtf_path,
+    narrowpeak = list.files(results_dir, pattern = "_peaks\\.narrowPeak$", recursive = TRUE, full.names = TRUE)[1]
   )
   
   # Report file discovery status
@@ -204,25 +242,25 @@ preprocess_peakprime_hybrid <- function(outdir = ".",
   # ==== SAVE PROCESSED DATA ====
   cat("\\n💾 Saving processed data files...\\n")
   
-  # Save QC data
-  saveRDS(qc_enhanced, file.path(outdir, "qc_data.rds"))
+  # Save QC data to results directory
+  saveRDS(qc_enhanced, file.path(results_dir, "qc_data.rds"))
   cat("   ✓ qc_data.rds\\n")
   
   # Save selected peaks
   if (!is.null(selected_data)) {
-    saveRDS(selected_data, file.path(outdir, "peaks_data.rds"))
+    saveRDS(selected_data, file.path(results_dir, "peaks_data.rds"))
     cat("   ✓ peaks_data.rds\\n")
   }
   
   # Save GTF data
   if (!is.null(gtf_processed)) {
-    saveRDS(gtf_processed, file.path(outdir, "gtf_data.rds"))
+    saveRDS(gtf_processed, file.path(results_dir, "gtf_data.rds"))
     cat("   ✓ gtf_data.rds\\n")
   }
   
   # Save coverage index
   if (length(coverage_index) > 0) {
-    saveRDS(coverage_index, file.path(outdir, "coverage_index.rds"))
+    saveRDS(coverage_index, file.path(results_dir, "coverage_index.rds"))
     cat("   ✓ coverage_index.rds\\n")
   }
   
@@ -230,7 +268,9 @@ preprocess_peakprime_hybrid <- function(outdir = ".",
   manifest <- list(
     files = files,
     processed_time = Sys.time(),
-    processing_version = "hybrid_v1.0",
+    processing_version = "standalone_v1.0",
+    results_dir = results_dir,
+    gtf_path = gtf_path,
     qc_genes = nrow(qc_enhanced),
     selected_genes = sum(qc_enhanced$final_selection, na.rm = TRUE),
     coverage_genes = length(coverage_index),
@@ -241,7 +281,7 @@ preprocess_peakprime_hybrid <- function(outdir = ".",
     )
   )
   
-  saveRDS(manifest, file.path(outdir, "data_manifest.rds"))
+  saveRDS(manifest, file.path(results_dir, "data_manifest.rds"))
   cat("   ✓ data_manifest.rds\\n")
   
   # ==== SUMMARY REPORT ====
@@ -257,18 +297,17 @@ preprocess_peakprime_hybrid <- function(outdir = ".",
   if (!is.null(gtf_processed)) cat("🧬 gtf_data.rds - Processed gene annotations\\n") 
   if (length(coverage_index) > 0) cat("📈 coverage_index.rds - Preprocessed coverage data\\n")
   cat("📋 data_manifest.rds - Processing metadata\\n")
-  cat("\\n🚀 Now launch app_hybrid.R for ultra-fast + full-featured exploration!\\n")
+  cat("\\n🚀 Now launch app_standalone.R with this results directory for ultra-fast exploration!\\n")
+  cat("   Usage: Rscript app_standalone.R", results_dir, "\\n")
   
   return(invisible(manifest))
 }
 
-# ==== EXECUTE PREPROCESSING ====
-if (!interactive() || !exists(".preprocessing_skip")) {
-  cat("\\n=== PeakPrime Enhanced Preprocessor ===\\n")
-  
-  # Run preprocessing with default settings
-  result <- preprocess_peakprime_hybrid()
-  
-  cat("\\n✅ Preprocessing completed successfully!\\n")
-  cat("Launch the hybrid app with: shiny::runApp('app_hybrid.R')\\n")
-}
+# ==== COMMAND LINE USAGE ====
+# This script can be sourced as a library or run directly with parameters
+# Example usage:
+#   source("preprocess_for_standalone.R")  
+#   preprocess_peakprime_standalone("results/testboth", "/path/to/gtf")
+
+cat("📦 Standalone preprocessing functions loaded.\\n")
+cat("   Use: preprocess_peakprime_standalone(results_dir, gtf_path)\\n")

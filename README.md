@@ -446,7 +446,38 @@ nextflow run main.nf -profile pbs [other options]
 - Suitable for HPC environments
 - Configurable resource requirements
 
-## 📚 Citation
+## � Interactive Data Exploration
+
+After running the pipeline, explore your results with the **PeakPrime Standalone Explorer**:
+
+### 🚀 **Quick Start**
+```bash
+# 1. Preprocess results (one-time)
+Rscript preprocess_for_standalone.R results/your_analysis
+
+# 2. Launch interactive app
+Rscript app_standalone.R results/your_analysis
+```
+
+### 🌐 **UGent HPC Users**
+Run directly on the HPC RStudio Server:
+- 📖 **Full guide**: [HPC_RSTUDIO_GUIDE.md](HPC_RSTUDIO_GUIDE.md)
+- 🌐 **Portal**: https://login.hpc.ugent.be/
+
+### 📋 **Features**
+- ⚡ **Ultra-fast loading** with preprocessed data
+- 🧬 **Enhanced UTR visualization** with minimum width display
+- 📈 **Multi-peak analysis** showing all MACS2 detected peaks
+- 🎯 **Interactive gene selection** with QC metrics
+- 📊 **Multiple scaling options** (absolute, percentage, log10)
+
+**Documentation:**
+- 📖 [STANDALONE_GUIDE.md](STANDALONE_GUIDE.md) - Complete usage guide
+- 🌐 [HPC_RSTUDIO_GUIDE.md](HPC_RSTUDIO_GUIDE.md) - UGent HPC setup
+
+---
+
+## �📚 Citation
 
 If you use Primer PeakFindR in your research, please cite:
 
