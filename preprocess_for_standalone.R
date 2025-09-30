@@ -174,6 +174,25 @@ preprocess_peakprime_standalone <- function(results_dir,
     })
   }
   
+  # ==== LOAD PRIMER ALIGNMENT DATA ====
+  cat("🔍 Loading primer alignment summary...\\n")
+  
+  alignment_summary_file <- file.path(results_dir, "primer_alignment_summary.tsv")
+  alignment_summary <- NULL
+  
+  if (file.exists(alignment_summary_file)) {
+    tryCatch({
+      alignment_summary <- fread(alignment_summary_file, header = TRUE)
+      cat("   ✓ Loaded", nrow(alignment_summary), "alignment records\\n")
+    }, error = function(e) {
+      cat("   ⚠️ Warning: Could not load alignment summary:", e$message, "\\n")
+      alignment_summary <<- data.frame()
+    })
+  } else {
+    cat("   ℹ️ No primer alignment summary found (optional)\\n")
+    alignment_summary <- data.frame()
+  }
+
   # ==== PROCESS BIGWIG COVERAGE DATA ====
   coverage_index <- list()
   
@@ -264,6 +283,12 @@ preprocess_peakprime_standalone <- function(results_dir,
     cat("   ✓ coverage_index.rds\\n")
   }
   
+  # Save alignment summary
+  if (!is.null(alignment_summary) && nrow(alignment_summary) > 0) {
+    saveRDS(alignment_summary, file.path(results_dir, "alignment_summary.rds"))
+    cat("   ✓ alignment_summary.rds\\n")
+  }
+  
   # Create enhanced manifest
   manifest <- list(
     files = files,
@@ -275,6 +300,7 @@ preprocess_peakprime_standalone <- function(results_dir,
     selected_genes = sum(qc_enhanced$final_selection, na.rm = TRUE),
     coverage_genes = length(coverage_index),
     gtf_features = if(!is.null(gtf_processed)) length(gtf_processed) else 0,
+    alignment_records = if(!is.null(alignment_summary)) nrow(alignment_summary) else 0,
     settings = list(
       max_coverage_points = max_coverage_points,
       coverage_window_pad = coverage_window_pad

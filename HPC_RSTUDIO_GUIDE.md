@@ -1,4 +1,4 @@
-# Running PeakPrime Standalone App on UGent HPC RStudio Server
+# Running PeakPrime Explorer App on UGent HPC RStudio Server
 
 ## 🎯 **Overview**
 

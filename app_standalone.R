@@ -131,6 +131,11 @@ coverage_index <- if (file.exists(file.path(results_dir, "coverage_index.rds")))
   readRDS(file.path(results_dir, "coverage_index.rds"))
 } else NULL
 
+# Load alignment summary data
+alignment_summary <- if (file.exists(file.path(results_dir, "alignment_summary.rds"))) {
+  readRDS(file.path(results_dir, "alignment_summary.rds"))
+} else data.frame()
+
 # Load all peaks data if available
 all_peaks_data <- NULL
 narrowpeak_file <- list.files(file.path(results_dir, "macs2_peaks"), 
@@ -181,6 +186,13 @@ cat("📋 Converted data.table to data.frame for reliable filtering\n")
 
 load_time <- Sys.time() - start_time
 cat("⚡ Loaded", nrow(qc_data), "genes in", format(load_time, digits = 2), "\n")
+
+# Report alignment data availability
+if (nrow(alignment_summary) > 0) {
+  cat("🔍 Alignment data loaded:", nrow(alignment_summary), "records\n")
+} else {
+  cat("ℹ️ No alignment data available\n")
+}
 
 # Store source information for UI display
 source_info <- paste0("📂 Source: ", basename(results_dir), 
@@ -1004,10 +1016,7 @@ ui <- fluidPage(
       ),
       
       numericInput("max_isoforms", "Max transcript isoforms:",
-                  value = 15, min = 1, max = 25, step = 1),
-      
-      br(),
-      div(class = "feature-badge", "Full plot_gene_with_window features")
+                  value = 15, min = 1, max = 25, step = 1)
     ),
     
     mainPanel(
@@ -1015,7 +1024,9 @@ ui <- fluidPage(
       
       tabsetPanel(
         tabPanel("Gene Plot",
-                plotOutput("comprehensive_plot", height = "650px")),
+                plotOutput("comprehensive_plot", height = "650px"),
+                br(),
+                downloadButton("download_plot_png", "Download Plot as PNG")),
         
         tabPanel("Gene Data",
                 h4("Gene Quality Control Summary"),
@@ -1026,7 +1037,49 @@ ui <- fluidPage(
                 verbatimTextOutput("performance_info"),
                 
                 h4("Available Data"),
-                verbatimTextOutput("data_summary"))
+                verbatimTextOutput("data_summary")),
+        
+        tabPanel("Primer Alignment",
+                h4("🔍 Primer Alignment Summary"),
+                br(),
+                conditionalPanel(
+                  condition = "output.alignment_available",
+                  p("Showing alignment results for the selected gene from the main panel."),
+                  fluidRow(
+                    column(6,
+                      h5("Filter by Primer Index:"),
+                      selectInput("alignment_primer_filter",
+                                 label = NULL,
+                                 choices = c("All Primers" = "all"),
+                                 selected = "all",
+                                 multiple = FALSE)
+                    ),
+                    column(6,
+                      h5("Show only perfect matches:"),
+                      checkboxInput("alignment_perfect_only", 
+                                   label = "No mismatches", 
+                                   value = FALSE),
+                      br(),
+                      downloadButton("download_alignment_csv", "Download Alignment CSV")
+                    )
+                  ),
+                  br(),
+                  h5("Alignment Summary Statistics:"),
+                  verbatimTextOutput("alignment_stats"),
+                  br(),
+                  h5("Detailed Alignment Results:"),
+                  DT::dataTableOutput("alignment_table")
+                ),
+                
+                conditionalPanel(
+                  condition = "!output.alignment_available",
+                  wellPanel(
+                    h5("⚠️ No Alignment Data Available"),
+                    p("Primer alignment analysis was not performed or results are not available for this dataset."),
+                    p("To generate alignment data, run the PeakPrime pipeline with primer alignment enabled."),
+                    tags$code("nextflow run main.nf --bam sample.bam --genes targets.txt --transcriptome_qc")
+                  )
+                ))
       )
     )
   )
@@ -1119,7 +1172,6 @@ server <- function(input, output, session) {
       "✓ Reactive filtering with cached data",
       "",
       "=== FEATURE COMPLETENESS ===",
-      "✓ Full plot_gene_with_window functionality",
       "✓ Multi-transcript gene models", 
       "✓ Coverage tracks with multiple scaling options",
       "✓ Peak region highlighting",
@@ -1152,6 +1204,163 @@ server <- function(input, output, session) {
             "✅ All data components loaded successfully"),
       sep = "\n"
     )
+  })
+  
+  # ==============================================================================
+  # PRIMER ALIGNMENT TAB SERVER LOGIC
+  # ==============================================================================
+  
+  # Check if alignment data is available
+  output$alignment_available <- reactive({
+    nrow(alignment_summary) > 0
+  })
+  outputOptions(output, "alignment_available", suspendWhenHidden = FALSE)
+  
+  # Update primer index filter choices based on selected gene
+  observe({
+    if (nrow(alignment_summary) > 0 && !is.null(input$gene_id)) {
+      gene_data <- alignment_summary[alignment_summary$gene_id == input$gene_id, ]
+      if (nrow(gene_data) > 0) {
+        primer_indices <- sort(unique(gene_data$primer_index))
+        primer_choices <- c("All Primers" = "all", setNames(primer_indices, paste("Primer", primer_indices)))
+        updateSelectInput(session, "alignment_primer_filter", 
+                         choices = primer_choices, 
+                         selected = "all")
+      } else {
+        updateSelectInput(session, "alignment_primer_filter", 
+                         choices = c("No primers for this gene" = "none"), 
+                         selected = "none")
+      }
+    }
+  })
+  
+  # Filtered alignment data
+  filtered_alignment <- reactive({
+    if (nrow(alignment_summary) == 0 || is.null(input$gene_id)) return(data.frame())
+    
+    # Filter by selected gene from main panel
+    data <- alignment_summary[alignment_summary$gene_id == input$gene_id, ]
+    
+    if (nrow(data) == 0) return(data.frame())
+    
+    # Filter by primer index
+    if (!is.null(input$alignment_primer_filter) && input$alignment_primer_filter != "all" && input$alignment_primer_filter != "none") {
+      data <- data[data$primer_index == as.numeric(input$alignment_primer_filter), ]
+    }
+    
+    # Filter for perfect matches only
+    if (!is.null(input$alignment_perfect_only) && input$alignment_perfect_only) {
+      data <- data[data$mismatches == 0, ]
+    }
+    
+    return(data)
+  })
+
+  # Download handler for plot PNG
+  output$download_plot_png <- downloadHandler(
+    filename = function() {
+      paste0("gene_plot_", input$gene_id, ".png")
+    },
+    content = function(file) {
+      # Use the same plotting function and arguments as renderPlot
+      plot_obj <- plot_gene_comprehensive(
+        gene_id = input$gene_id,
+        qc_data = qc_data,
+        all_peaks_data = all_peaks_data,
+        yaxis_mode = input$yaxis_mode,
+        show_primers = input$show_primers,
+        max_isoforms = input$max_isoforms,
+        show_peak_region = input$show_peak_region,
+        show_all_peaks = input$show_all_peaks,
+        max_peaks = if(!is.null(input$max_peaks)) input$max_peaks else 3
+      )
+      ggsave(file, plot = plot_obj, width = 12, height = 8, dpi = 100)
+    }
+  )
+
+  # Download handler for alignment summary CSV
+  output$download_alignment_csv <- downloadHandler(
+    filename = function() {
+      paste0("alignment_summary_", input$gene_id, ".csv")
+    },
+    content = function(file) {
+      data <- filtered_alignment()
+      if (nrow(data) == 0) {
+        write.csv(data.frame(), file, row.names = FALSE)
+      } else {
+        write.csv(data, file, row.names = FALSE)
+      }
+    }
+  )
+  
+  # Alignment statistics
+  output$alignment_stats <- renderText({
+    if (nrow(alignment_summary) == 0) return("No alignment data available")
+    if (is.null(input$gene_id)) return("Please select a gene")
+    
+    filtered_data <- filtered_alignment()
+    
+    if (nrow(filtered_data) == 0) {
+      return(paste("No alignment data available for gene:", input$gene_id))
+    }
+    
+    # Calculate statistics for selected gene
+    total_alignments <- nrow(filtered_data)
+    unique_primers <- length(unique(filtered_data$primer_index))
+    perfect_matches <- sum(filtered_data$mismatches == 0, na.rm = TRUE)
+    unique_transcripts <- length(unique(filtered_data$aligned_transcript))
+    
+    # Mismatch distribution
+    mismatch_table <- table(filtered_data$mismatches)
+    mismatch_summary <- paste(names(mismatch_table), "mismatches:", mismatch_table, collapse = " | ")
+    
+    paste(
+      paste("Gene:", input$gene_id),
+      paste("Total alignments:", total_alignments),
+      paste("Primers analyzed:", unique_primers),
+      paste("Aligned transcripts:", unique_transcripts),
+      paste("Perfect matches:", perfect_matches, paste0("(", round(100 * perfect_matches / total_alignments, 1), "%)")),
+      paste("Mismatch distribution:", mismatch_summary),
+      sep = "\n"
+    )
+  })
+  
+  # Alignment data table
+  output$alignment_table <- DT::renderDataTable({
+    filtered_data <- filtered_alignment()
+    
+    if (nrow(filtered_data) == 0) {
+      return(data.frame(Message = "No data available or no matches for current filters"))
+    }
+    
+    # Select and rename columns for display
+    display_data <- filtered_data[, c("gene_id", "primer_index", "primer_type", 
+                                     "primer_sequence", "aligned_transcript", 
+                                     "aligned_gene_name", "alignment_start", 
+                                     "alignment_end", "alignment_length", 
+                                     "mismatches", "distance_to_end")]
+    
+    colnames(display_data) <- c("Gene ID", "Primer Index", "Type", "Sequence", 
+                               "Transcript", "Gene Name", "Start", "End", 
+                               "Length", "Mismatches", "Distance to End")
+    
+    DT::datatable(
+      display_data,
+      options = list(
+        pageLength = 25,
+        scrollX = TRUE,
+        columnDefs = list(
+          list(className = "dt-center", targets = c(1, 2, 6, 7, 8, 9, 10)),
+          list(width = "120px", targets = 3),  # Sequence column
+          list(width = "80px", targets = c(1, 2, 8, 9, 10))  # Numeric columns
+        )
+      ),
+      class = "cell-border stripe",
+      rownames = FALSE
+    ) %>%
+      DT::formatStyle("Mismatches",
+        backgroundColor = DT::styleInterval(c(0, 1), c("#d4edda", "#fff3cd", "#f8d7da"))
+      )
   })
 }
 

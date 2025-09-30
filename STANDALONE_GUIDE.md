@@ -11,8 +11,7 @@ A fast Shiny application for exploring PeakPrime pipeline outputs with comprehen
 Rscript preprocess_for_standalone.R /path/to/results/directory
 
 # Examples:
-Rscript preprocess_for_standalone.R results/testboth
-Rscript preprocess_for_standalone.R results/Class1_W20_pad100
+Rscript preprocess_for_standalone.R results/test
 ```
 
 ### **Step 2: Launch App** 
@@ -22,8 +21,7 @@ Rscript preprocess_for_standalone.R results/Class1_W20_pad100
 Rscript app_standalone.R /path/to/results/directory
 
 # Examples:
-Rscript app_standalone.R results/testboth
-Rscript app_standalone.R results/Class1_W20_pad100
+Rscript app_standalone.R results/test
 ```
 
 ### **R Console Usage:**
@@ -32,7 +30,7 @@ Rscript app_standalone.R results/Class1_W20_pad100
 source("preprocess_for_standalone.R")
 preprocess_peakprime_standalone("results/your_analysis")  # Auto-detect GTF
 # OR specify custom GTF:
-# preprocess_peakprime_standalone("results/your_analysis", "/path/to/custom.gtf")
+preprocess_peakprime_standalone("results/your_analysis", "/path/to/custom.gtf")
 
 # Launch app
 source("app_standalone.R")  # Enter directory when prompted
@@ -137,22 +135,7 @@ When **"Show all detected peaks"** is enabled:
 
 ## 🔧 **Troubleshooting**
 
-### 🚨 **Most Common Issue: Missing GTF/Coverage Data**
-
-If your app shows "GTF data: ❌ Missing", the preprocessing failed. **Quick fix:**
-
-```r
-# In R console, run these commands in order:
-library(data.table); library(rtracklayer); library(GenomicRanges); library(IRanges)
-source("preprocess_for_standalone.R")
-preprocess_peakprime_standalone("results/testboth", "/data/gent/vo/000/gvo00027/resources/Ensembl_transcriptomes/Homo_sapiens/GRCh38/Homo_sapiens.GRCh38.109.chrIS_spikes_45S.gtf")
-
-# Then re-launch the app:
-source("app_standalone.R")  # Enter: results/testboth
-runApp(peakprime_app)
-```
-
-### **Common Issues**
+### 🚨 **Common Issues**
 
 1. **"GTF data: ❌ Missing" or "Coverage data: ❌ Missing"**
    
@@ -170,7 +153,7 @@ runApp(peakprime_app)
    library(GenomicRanges)
    library(IRanges)
    
-   # Step 3: Re-run preprocessing with packages loaded
+   # Step 3: Re-run preprocessing with packages loaded and ensure the GTf file exists
    source("preprocess_for_standalone.R")
    preprocess_peakprime_standalone(results_dir, "/path/to/your.gtf")
    
