@@ -2,7 +2,7 @@
 
 <table>
   <tr>
-  <td><img src="logo2.png" alt="PeakPrime Logo" width="300"/></td>
+  <td><img src="docs/logo2.png" alt="PeakPrime Logo" width="300"/></td>
     <td style="vertical-align: middle;"><h1 style="margin:0; padding-left:20px;">PeakPrime — MACS2-based 3'end RNA-seq primer design pipeline</h1></td>
   </tr>
 </table>
