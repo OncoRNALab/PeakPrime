@@ -535,11 +535,10 @@ plot_gene_comprehensive <- function(gene_id, qc_data, all_peaks_data, yaxis_mode
       tx_exons <- structure$exons[tx_mask]
       
       if (length(tx_exons) > 0) {
-        # Use distinct colors for each transcript
-        tx_colors <- c("black", "darkblue", "darkgreen", "purple", "darkred")
-        tx_color <- tx_colors[((i - 1) %% length(tx_colors)) + 1]
+        # Use light red color for all introns
+        intron_color <- "#FF9999"  # Light red
         
-        cat("  Drawing introns for", tx_id, "at y =", y_pos, "color =", tx_color, "\n")
+        cat("  Drawing introns for", tx_id, "at y =", y_pos, "color = light red\n")
         
         # Draw true intron segments between consecutive exons
         if (length(tx_exons) > 1) {
@@ -566,7 +565,7 @@ plot_gene_comprehensive <- function(gene_id, qc_data, all_peaks_data, yaxis_mode
                 aes(x = x, xend = xend, y = y, yend = yend),
                 inherit.aes = FALSE,
                 linewidth = 1.2,
-                color = tx_color
+                color = intron_color
               )
           }
         } else if (length(tx_exons) == 1) {
@@ -579,7 +578,7 @@ plot_gene_comprehensive <- function(gene_id, qc_data, all_peaks_data, yaxis_mode
               "segment",
               x = tx_start, xend = tx_end,
               y = y_pos, yend = y_pos,
-              color = tx_color, linewidth = 1.0
+              color = intron_color, linewidth = 1.0
             )
         }
       }
@@ -602,7 +601,7 @@ plot_gene_comprehensive <- function(gene_id, qc_data, all_peaks_data, yaxis_mode
                     color = "gray40", linewidth = 1) +
         geom_rect(aes(xmin = plot_start, xmax = plot_end, 
                      ymin = y_pos - 0.1, ymax = y_pos + 0.1),
-                 fill = "lightgray", color = "black", linewidth = 0.1)
+                 fill = "#666666", color = "black", linewidth = 0.1)
     } else {
       # GTF data available - draw transcript structures
       # Get exons for this specific transcript
@@ -641,7 +640,7 @@ plot_gene_comprehensive <- function(gene_id, qc_data, all_peaks_data, yaxis_mode
           p_feat <- p_feat + 
             geom_rect(data = exon_df,
                      aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
-                     fill = "lightgray", color = "gray", linewidth = 0.2, alpha = 0.7)
+                     fill = "#666666", color = "gray", linewidth = 0.2, alpha = 0.7)
           
           cat("    Drew", length(tx_exons), "exon regions (transcribed areas)\\n")
         }
@@ -821,11 +820,11 @@ plot_gene_comprehensive <- function(gene_id, qc_data, all_peaks_data, yaxis_mode
           border_col <- "black"
           border_size <- 0.5
         } else {
-          # Non-selected peaks - muted style
-          peak_fill <- "lightgray"
-          alpha_value <- 0.6
-          border_col <- "gray"
-          border_size <- 0.2
+          # Non-selected peaks - muted style with dark grey for visibility
+          peak_fill <- "#666666"
+          alpha_value <- 0.8
+          border_col <- "gray30"
+          border_size <- 0.3
         }
         
         # Y-position with slight offset for multiple peaks

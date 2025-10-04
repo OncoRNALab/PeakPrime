@@ -138,23 +138,12 @@ def analyze_alignments(alignment_bam, primers_tsv, transcriptome_fasta=None,
             end_pos = read.reference_end if read.reference_end is not None else start_pos + alignment_length
             
             # Distance to end of transcript - strand-specific calculation
-            # This represents the total distance from the primer start to the transcript end
-            # (includes the primer length itself)
+            # This represents the distance from the primer end to the transcript end
             distance_to_end = "NA"
             if transcript_length is not None:
                 # Get gene strand information for this primer
                 gene_strand = primer_to_gene_strand.get(read.query_name, "+")  # default to positive
-                
-                if gene_strand == "-":
-                    # For negative strand genes: primers align in reverse orientation
-                    # Distance from primer start (leftmost position = 3' end of primer) to transcript start (5' end of gene)
-                    # This includes the primer length
-                    distance_to_end = start_pos
-                else:
-                    # For positive strand genes: 
-                    # Distance from primer start (leftmost position = 5' end of primer) to transcript end (3' end of gene)
-                    # This includes the primer length
-                    distance_to_end = transcript_length - start_pos
+                distance_to_end = transcript_length - end_pos
             
             # Alignment direction - should always be forward after filtering
             direction = "forward"  # Only forward alignments are processed
