@@ -284,6 +284,34 @@ Rscript bin/MakePlots_new.R \
 python bin/summarize_pipeline_results.py results/your_output_directory/
 ```
 
+### Interactive Exploration with Shiny App
+
+PeakPrime includes an interactive Shiny application for exploring results:
+
+```bash
+# Navigate to your results directory
+cd results/your_output_directory/
+
+# Copy the Shiny app
+cp ../../app.R .
+
+# Launch the interactive explorer (in R)
+R
+> shiny::runApp("app.R")
+
+# Or from command line (requires shiny package)
+Rscript -e "shiny::runApp('app.R')"
+```
+
+**Features of the Interactive Explorer:**
+- **Automatic file discovery**: Finds all required PeakPrime output files
+- **Gene filtering**: View only genes with selected peaks or browse all genes
+- **Interactive plotting**: Customize y-axis scaling, primer display, and isoform limits
+- **QC summary tables**: View detailed quality control metrics for each gene
+- **Real-time updates**: Changes to plot settings update the visualization instantly
+
+**Required R packages**: `shiny`, `DT`, `rtracklayer`, `data.table`, `ggplot2`, `GenomicRanges`, `IRanges`, `GenomicFeatures`, `grid`
+
 #### Sample Plot Output
 ![Example Gene Visualization](plot_ENSG00000096384.png)
 
