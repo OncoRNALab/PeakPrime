@@ -92,10 +92,13 @@ def analyze_alignments(alignment_bam, primers_tsv, transcriptome_fasta=None,
     # Read original primer data
     print("Loading primer data...")
     primers = pd.read_csv(primers_tsv, sep='\t')
-    primers['primer_id'] = (primers['gene_id'].astype(str) + "|" +
-                           "idx" + primers['primer_index'].astype(str) + "|" +
-                           primers['primer_type'].astype(str) + "|" +
-                           "strand" + primers['gene_strand'].astype(str))
+    
+    # Create primer_id if it doesn't exist (for backward compatibility)
+    if 'primer_id' not in primers.columns:
+        primers['primer_id'] = (primers['gene_id'].astype(str) + "|" +
+                               "idx" + primers['primer_index'].astype(str) + "|" +
+                               primers['primer_type'].astype(str) + "|" +
+                               "strand" + primers['gene_strand'].astype(str))
     
     # Create a lookup dictionary for gene strand information
     primer_to_gene_strand = dict(zip(primers['primer_id'], primers['gene_strand']))
@@ -234,9 +237,9 @@ def analyze_alignments(alignment_bam, primers_tsv, transcriptome_fasta=None,
             'direction': 'alignment_strand'
         })
         
-        # Reorder columns (remove alignment_mapq)
+        # Reorder columns (remove alignment_mapq, include primer_id)
         output_columns = [
-            'gene_id', 'primer_index', 'primer_type', 'primer_sequence', 'gene_strand',
+            'gene_id', 'primer_index', 'primer_type', 'primer_sequence', 'gene_strand', 'primer_id',
             'aligned_transcript', 'aligned_gene_name', 'alignment_start', 'alignment_end',
             'alignment_length', 'alignment_strand', 'mismatches', 
             'distance_to_end', 'transcript_length'
@@ -259,7 +262,7 @@ def analyze_alignments(alignment_bam, primers_tsv, transcriptome_fasta=None,
         
     else:
         detailed_summary = pd.DataFrame(columns=[
-            'gene_id', 'primer_index', 'primer_type', 'primer_sequence', 'gene_strand',
+            'gene_id', 'primer_index', 'primer_type', 'primer_sequence', 'gene_strand', 'primer_id',
             'aligned_transcript', 'aligned_gene_name', 'alignment_start', 'alignment_end',
             'alignment_length', 'alignment_strand', 'mismatches',
             'distance_to_end', 'transcript_length'

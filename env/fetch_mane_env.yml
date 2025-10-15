@@ -1,0 +1,14 @@
+name: fetch_mane_env
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  # Core R
+  - r-base=4.3.*
+  
+  # CRAN packages
+  - r-optparse       # Command-line argument parsing
+  
+  # Bioconductor packages
+  - bioconductor-biomart    # Ensembl data access

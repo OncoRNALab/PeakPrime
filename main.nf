@@ -6,9 +6,14 @@ nextflow.enable.dsl=2
 
 include { makeplots } from './workflows/makeplots.nf'
 include { primer_design } from './workflows/primer_design.nf'
+include { distance_primer_design } from './workflows/distance_primer_design.nf'
 
 workflow {
-  if (params.makeplots && !params.bam) {
+  if (params.distance_mode) {
+    // Distance-based primer design workflow
+    // Designs primers at a fixed distance from 3' end
+    distance_primer_design()
+  } else if (params.makeplots && !params.bam) {
     // Standalone plotting mode using pre-existing files
     makeplots ()
   } else {

@@ -1,0 +1,7 @@
+name: extract_3prime_env
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - python>=3.10

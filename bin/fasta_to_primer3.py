@@ -43,8 +43,16 @@ def create_primer3_input(sequences, settings, output_file):
     
     with open(output_file, 'w') as f:
         for i, (header, sequence) in enumerate(sequences):
-            # Extract gene ID from header (format: GENE|chr:start-end(strand))
-            gene_id = header.split('|')[0] if '|' in header else f"seq_{i+1}"
+            # Extract sequence ID from header
+            # Priority: 1) Use part before '|' if present (for gene|info format)
+            #          2) Use first word of header (for simple IDs like "ERCC_00002")
+            #          3) Fall back to seq_N if header is empty
+            if '|' in header:
+                gene_id = header.split('|')[0]
+            elif header:
+                gene_id = header.split()[0]  # First word
+            else:
+                gene_id = f"seq_{i+1}"
             
             # Write sequence identifier
             f.write(f"SEQUENCE_ID={gene_id}\n")

@@ -51,7 +51,16 @@ git clone https://github.com/OncoRNALab/PeakPrime.git
 
 ## 🚀 Quick Start
 
-### Basic Primer Design
+### Two Modes Available
+
+PeakPrime now supports two primer design modes:
+
+1. **Peak-Based Mode (default)**: Designs primers based on RNA-seq coverage peaks identified by MACS2
+2. **Distance-Based Mode**: Designs primers at a fixed distance from the 3' end of transcripts
+
+### Mode 1: Peak-Based Primer Design (Default)
+
+#### Basic Usage
 ```bash
 nextflow run main.nf \
   --bam sample.bam \
@@ -61,7 +70,33 @@ nextflow run main.nf \
   -profile local
 ```
 
-### With Custom MACS2 Parameters
+### Mode 2: Distance-Based Primer Design
+
+Design primers at a fixed distance from the 3' end of transcripts (no BAM file required).
+
+#### Using Gene IDs (Fetches MANE Transcripts)
+```bash
+nextflow run main.nf \
+  --distance_mode \
+  --genes gene_list.txt \
+  --template_length 300 \
+  --outdir results_distance/ \
+  -profile local
+```
+
+#### Using Transcript FASTA
+```bash
+nextflow run main.nf \
+  --distance_mode \
+  --transcript_fasta transcripts.fasta \
+  --template_length 300 \
+  --outdir results_distance/ \
+  -profile local
+```
+
+**📖 For detailed documentation on distance-based mode, see [docs/DISTANCE_BASED_PRIMER_DESIGN.md](docs/DISTANCE_BASED_PRIMER_DESIGN.md)**
+
+### With Custom MACS2 Parameters (Peak-Based Mode)
 ```bash
 nextflow run main.nf \
   --bam sample.bam \
