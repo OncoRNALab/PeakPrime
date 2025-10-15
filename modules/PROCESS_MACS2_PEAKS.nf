@@ -2,7 +2,9 @@ process PROCESS_MACS2_PEAKS {
     tag "process_peaks"
     publishDir "${params.outdir}/processed_peaks", mode: 'copy'
     
-    conda 'bioconda::bioconductor-genomicfeatures bioconda::bioconductor-rtracklayer bioconda::bioconductor-genomicranges bioconda::bioconductor-iranges bioconda::bioconductor-s4vectors bioconda::bioconductor-biostrings bioconda::bioconductor-txdbmaker conda-forge::r-optparse conda-forge::r-data.table'
+    // Use environment file for cleaner code and better maintainability
+    conda "${projectDir}/env/process_macs2_peaks_env.yml"
+    // Alternative inline: conda 'bioconda::bioconductor-genomicfeatures bioconda::bioconductor-rtracklayer bioconda::bioconductor-genomicranges bioconda::bioconductor-iranges bioconda::bioconductor-s4vectors bioconda::bioconductor-biostrings bioconda::bioconductor-txdbmaker conda-forge::r-optparse conda-forge::r-data.table'
     
     input:
     tuple val(sample_id), path(narrowpeak_file)

@@ -137,24 +137,16 @@ def analyze_alignments(alignment_bam, primers_tsv, transcriptome_fasta=None,
             start_pos = read.reference_start
             end_pos = read.reference_end if read.reference_end is not None else start_pos + alignment_length
             
-            # Distance to end of transcript - strand-specific calculation
-            # This represents the total distance from the primer start to the transcript end
-            # (includes the primer length itself)
+            # Distance to end of transcript - 3' RNA-seq specific calculation
+            # For 3' RNA-seq protocols, we need distance to the 3' end (poly-A tail)
+            # The transcriptome FASTA has sequences in 5'→3' mRNA orientation for ALL genes
+            # Therefore, the 3' end is always at position = transcript_length regardless of genomic strand
             distance_to_end = "NA"
             if transcript_length is not None:
-                # Get gene strand information for this primer
-                gene_strand = primer_to_gene_strand.get(read.query_name, "+")  # default to positive
-                
-                if gene_strand == "-":
-                    # For negative strand genes: primers align in reverse orientation
-                    # Distance from primer start (leftmost position = 3' end of primer) to transcript start (5' end of gene)
-                    # This includes the primer length
-                    distance_to_end = start_pos
-                else:
-                    # For positive strand genes: 
-                    # Distance from primer start (leftmost position = 5' end of primer) to transcript end (3' end of gene)
-                    # This includes the primer length
-                    distance_to_end = transcript_length - start_pos
+                # Distance from primer start to 3' end (poly-A tail)
+                # This is the SAME for both positive and negative strand genes
+                # because transcriptome coordinates are in mRNA orientation
+                distance_to_end = transcript_length - start_pos
             
             # Alignment direction - should always be forward after filtering
             direction = "forward"  # Only forward alignments are processed

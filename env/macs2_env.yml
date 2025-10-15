@@ -1,0 +1,22 @@
+name: macs2_env
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  # Pin Python version to ensure ABI compatibility
+  - python=3.9.*
+  
+  # MACS2 and its dependencies with strict version pins
+  # These versions are known to be compatible with each other
+  - numpy=1.21.6
+  - scipy=1.7.3
+  - macs2=2.2.7.1
+  
+  # Homer for peak annotation (optional but useful)
+  - homer
+  
+  # Additional dependencies that MACS2 needs
+  # These will be automatically resolved but good to document
+  # - cython
+  # - setuptools

@@ -1,7 +1,9 @@
 process PRIMERS_TO_FASTA {
   tag 'primers_to_fasta'
   publishDir params.outdir, mode: 'copy'
-  conda "r-base>=4.3 r-essentials bioconductor-biostrings r-optparse"
+  // Use environment file to avoid r-essentials metapackage (100+ deps) which causes slow/hanging conda resolution
+  conda "${projectDir}/env/primers_to_fasta_env.yml"
+  // Alternative inline (if env file doesn't work): conda "r-base=4.3.* bioconductor-biostrings r-optparse"
 
   input:
   path primers_tsv

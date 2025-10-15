@@ -2,7 +2,10 @@ process MACS2_CALLPEAK {
     tag "$sample_id"
     publishDir "${params.outdir}/macs2_peaks", mode: 'copy'
     
-    conda 'bioconda::macs2=2.2.7.1 bioconda::homer conda-forge::numpy=1.21.6 conda-forge::scipy=1.7.3'
+    // Use environment file for better reproducibility across different conda versions
+    // Alternative: uncomment the line below to use inline conda specification
+    conda "${projectDir}/env/macs2_env.yml"
+    // conda 'python=3.9.* bioconda::macs2=2.2.7.1 bioconda::homer conda-forge::numpy=1.21.6 conda-forge::scipy=1.7.3'
     
     input:
     tuple val(sample_id), path(bam_file)

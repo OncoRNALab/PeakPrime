@@ -1,5 +1,7 @@
 process MAKEPLOTS_NEW {
-  conda "r-base>=4.3 r-essentials r-ggplot2 r-data.table r-optparse r-patchwork r-cowplot bioconductor-genomicranges bioconductor-rtracklayer bioconductor-iranges bioconductor-s4vectors bioconductor-genomicfeatures bioconductor-bsgenome bioconductor-bsgenome.hsapiens.ucsc.hg38"
+  // Use environment file to avoid r-essentials metapackage (100+ deps) which causes slow/hanging conda resolution
+  conda "${projectDir}/env/makeplots_env.yml"
+  // Alternative inline: conda "r-base=4.3.* r-ggplot2 r-data.table r-optparse r-patchwork r-cowplot bioconductor-genomicranges bioconductor-rtracklayer bioconductor-iranges bioconductor-s4vectors bioconductor-genomicfeatures"
   tag "$gene_id"
   publishDir params.outdir, mode: 'copy'
   errorStrategy 'ignore'  // Continue pipeline even if individual plots fail

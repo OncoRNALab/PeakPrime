@@ -1,0 +1,16 @@
+name: primers_to_fasta_env
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  # Minimal R installation instead of r-essentials (which has 100+ packages)
+  - r-base=4.3.*
+  - r-optparse
+  - bioconductor-biostrings
+  
+  # Only essential dependencies for Biostrings
+  - bioconductor-biocgenerics
+  - bioconductor-s4vectors
+  - bioconductor-iranges
+  - bioconductor-xvector

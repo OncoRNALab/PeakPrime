@@ -22,6 +22,11 @@ workflow primer_design {
   if (!params.gtf) error "Missing required parameter: --gtf" 
   if (!params.genes) error "Missing required parameter: --genes"
   
+  // Validate optional parameters
+  if (params.distance_threshold && params.distance_threshold <= 0) {
+    error "Parameter --distance_threshold must be positive (current: ${params.distance_threshold})"
+  }
+  
   // Create input channels
   bam_ch = Channel.fromPath(params.bam, checkIfExists: true)
   gtf_ch = Channel.fromPath(params.gtf, checkIfExists: true)

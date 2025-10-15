@@ -1,0 +1,25 @@
+name: makeplots_env
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  # Core R
+  - r-base=4.3.*
+  
+  # Plotting packages
+  - r-ggplot2
+  - r-data.table
+  - r-optparse
+  - r-patchwork      # For combining plots
+  - r-cowplot        # Alternative plot combiner
+  
+  # Bioconductor packages for genomic data
+  - bioconductor-genomicranges
+  - bioconductor-rtracklayer
+  - bioconductor-iranges
+  - bioconductor-s4vectors
+  - bioconductor-genomicfeatures
+  
+  # Note: Removed r-essentials (100+ packages not needed)
+  # Note: Removed BSgenome packages - not directly used by MakePlots_new.R

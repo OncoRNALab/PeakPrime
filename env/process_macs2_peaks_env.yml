@@ -1,0 +1,24 @@
+name: process_macs2_peaks_env
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  # Core R
+  - r-base=4.3.*
+  
+  # CRAN packages
+  - r-optparse       # Command-line argument parsing
+  - r-data.table     # Data manipulation
+  
+  # Bioconductor packages for genomic analysis
+  - bioconductor-genomicfeatures  # Gene/transcript features (includes makeTxDbFromGFF)
+  - bioconductor-rtracklayer      # Import/export genomic data
+  - bioconductor-genomicranges    # Genomic interval operations
+  - bioconductor-iranges          # Integer range operations
+  - bioconductor-s4vectors        # S4 vector classes
+  - bioconductor-biostrings       # Biological sequence manipulation
+  - bioconductor-rsamtools        # FASTA file access (FaFile, getSeq)
+  
+  # TxDbMaker removed: makeTxDbFromGFF is provided by GenomicFeatures
+  # All packages are actually used by process_macs2_peaks.R

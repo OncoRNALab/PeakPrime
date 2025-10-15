@@ -1,0 +1,10 @@
+name: extract_cdna_primers_env
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  # Minimal R installation - only needs base R and optparse
+  - r-base=4.3.*
+  - r-optparse
+  - r-data.table  # Likely used by the script

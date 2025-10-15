@@ -15,6 +15,7 @@ process SELECT_BEST_PRIMERS {
   python ${projectDir}/bin/select_best_primer.py \
     --report ${report} \
     --summary ${summary} \
+    --distance_threshold ${params.distance_threshold} \
     --out best_primers.tsv
   """
 }
