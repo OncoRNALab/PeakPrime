@@ -28,7 +28,7 @@ Rscript app_standalone.R results/test
 ```r
 # Preprocess data (flexible GTF handling)
 source("preprocess_for_standalone.R")
-preprocess_peakprime_standalone("results/your_analysis")  # Auto-detect GTF
+preprocess_peakprime_standalone("results/FirstOrder_auto_300distThr")  # Auto-detect GTF
 # OR specify custom GTF:
 preprocess_peakprime_standalone("results/your_analysis", "/path/to/custom.gtf")
 
