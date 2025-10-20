@@ -12,6 +12,7 @@ include { PRIMERS_TO_FASTA } from '../modules/PRIMERS_TO_FASTA.nf'
 include { ALIGN_PRIMERS_TRANSCRIPTOME } from '../modules/ALIGN_PRIMERS_TRANSCRIPTOME.nf'
 include { ANALYZE_PRIMER_ALIGNMENTS } from '../modules/ANALYZE_PRIMER_ALIGNMENTS.nf'
 include { SELECT_BEST_PRIMERS } from '../modules/SELECT_BEST_PRIMERS.nf'
+include { OPTIMIZE_PRIMER_ISOFORMS } from '../modules/OPTIMIZE_PRIMER_ISOFORMS.nf'
 include { MAKEPLOTS_NEW } from '../modules/MAKEPLOTS_NEW.nf'
 include { SUMMARIZE_RESULTS } from '../modules/SUMMARIZE_RESULTS.nf'
 
@@ -105,6 +106,12 @@ workflow primer_design {
       )
       // Select best primers based on alignment summary
       best_primers = SELECT_BEST_PRIMERS(ANALYZE_PRIMER_ALIGNMENTS.out[0], ANALYZE_PRIMER_ALIGNMENTS.out[1])
+      
+      // Optimize primer selection to maximize distinct isoform coverage
+      optimized_primers = OPTIMIZE_PRIMER_ISOFORMS(
+        best_primers,
+        ANALYZE_PRIMER_ALIGNMENTS.out[1] // primer_alignment_summary.tsv (detailed alignments)
+      )
     }
 
     // Optional: Generate plots if --makeplots is enabled
@@ -144,4 +151,5 @@ workflow primer_design {
     cdna_primers
     primers_fasta
     best_primers
+    optimized_primers
 }

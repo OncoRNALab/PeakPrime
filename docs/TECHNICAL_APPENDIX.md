@@ -47,11 +47,13 @@ PRIMER_EXPLAIN_FLAG=1
 
 #### Selected Peaks TSV Format
 ```
-gene	chr	start	end	strand	peak_score	peak_pvalue	peak_qvalue	exonic_fraction	selection_method
-ENSG00000067191	chr1	12345678	12345798	+	45.2	1.5e-05	2.3e-04	0.95	best_peak
-ENSG00000089009	chr2	23456789	23456909	-	32.1	3.2e-04	1.1e-03	0.87	best_peak
-ENSG00000108468	chr3	34567890	34568010	+	28.9	5.7e-04	1.8e-03	0.92	best_peak
+gene	chr	start	end	strand	peak_score	peak_pvalue	peak_qvalue	exonic_fraction	peak_rank	selection_method
+ENSG00000067191	chr1	12345678	12345798	+	45.2	1.5e-05	2.3e-04	0.95	1	best_peak
+ENSG00000089009	chr2	23456789	23456909	-	32.1	3.2e-04	1.1e-03	0.87	2	best_peak
+ENSG00000108468	chr3	34567890	34568010	+	28.9	5.7e-04	1.8e-03	0.92	1	best_peak
 ```
+
+**Note**: The `peak_rank` column indicates the actual rank of the selected peak. When a gene has fewer peaks than the requested rank, the best available peak (rank 1) is used.
 
 #### cDNA Primers TSV Format
 ```

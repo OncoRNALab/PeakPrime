@@ -12,6 +12,7 @@ include { CONVERT_PRIMER3_TO_TSV } from '../modules/CONVERT_PRIMER3_TO_TSV.nf'
 include { ALIGN_PRIMERS_TRANSCRIPTOME } from '../modules/ALIGN_PRIMERS_TRANSCRIPTOME.nf'
 include { ANALYZE_PRIMER_ALIGNMENTS } from '../modules/ANALYZE_PRIMER_ALIGNMENTS.nf'
 include { SELECT_BEST_PRIMERS } from '../modules/SELECT_BEST_PRIMERS.nf'
+include { OPTIMIZE_PRIMER_ISOFORMS } from '../modules/OPTIMIZE_PRIMER_ISOFORMS.nf'
 
 
 workflow distance_primer_design {
@@ -109,10 +110,17 @@ workflow distance_primer_design {
         ANALYZE_PRIMER_ALIGNMENTS.out[1]  // filtered primers
       )
       
+      // Optimize primer selection to maximize distinct isoform coverage
+      optimized_primers = OPTIMIZE_PRIMER_ISOFORMS(
+        best_primers,
+        ANALYZE_PRIMER_ALIGNMENTS.out[1] // primer_alignment_summary.tsv (detailed alignments)
+      )
+      
       println "Transcriptome alignment enabled for specificity checking"
     } else {
       println "Transcriptome alignment skipped (no --transcriptome_index provided)"
       best_primers = Channel.empty()
+      optimized_primers = Channel.empty()
     }
 
   emit:
@@ -122,4 +130,5 @@ workflow distance_primer_design {
     primers_fasta
     gene_mapping
     best_primers
+    optimized_primers
 }

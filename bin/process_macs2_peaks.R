@@ -246,11 +246,18 @@ for(gene in unique(ordered_peaks$gene_id)) {
   
   if(nrow(gene_peaks) >= opt$peak_rank) {
     # Select the peak at the specified rank
-    selected_peaks <- rbind(selected_peaks, gene_peaks[opt$peak_rank, ])
+    peak_row <- gene_peaks[opt$peak_rank, ]
+    peak_row$actual_peak_rank <- opt$peak_rank
+    selected_peaks <- rbind(selected_peaks, peak_row)
   } else {
     # Not enough peaks for this gene at the requested rank
+    # Select the best available peak (rank 1) but mark it with the requested rank
+    peak_row <- gene_peaks[1, ]
+    peak_row$actual_peak_rank <- 1  # The actual rank of the selected peak
+    selected_peaks <- rbind(selected_peaks, peak_row)
     genes_without_rank <- c(genes_without_rank, gene)
-    cat("Warning: Gene", gene, "has only", nrow(gene_peaks), "peak(s), cannot select rank", opt$peak_rank, "\n")
+    cat("Warning: Gene", gene, "has only", nrow(gene_peaks), "peak(s), cannot select rank", opt$peak_rank, 
+        "- using rank 1 instead\n")
   }
 }
 
@@ -441,6 +448,9 @@ if(force_exonic_trimming) {
     genes_before_trimming <- target_regions$gene_id
     target_regions <- target_regions[keep_idx]
     
+    # Also filter best_peaks to keep them in sync
+    best_peaks <- best_peaks[!(best_peaks$gene_id %in% failed_trimming), ]
+    
     # Update QC for genes that failed forced trimming
     all_genes_qc$passes_exonic_filter[all_genes_qc$gene_id %in% failed_trimming] <- FALSE
     all_genes_qc$failure_reason[all_genes_qc$gene_id %in% failed_trimming] <- "Failed forced exonic trimming (no exonic overlap or trimmed region too short)"
@@ -455,6 +465,9 @@ if(!is.na(min_exonic_fraction) && !force_exonic_trimming) {
   genes_before_filter <- target_regions$gene_id
   target_regions <- target_regions[keep_idx]
   genes_after_filter <- target_regions$gene_id
+  
+  # Also filter best_peaks to keep them in sync
+  best_peaks <- best_peaks[best_peaks$gene_id %in% genes_after_filter, ]
   
   # Update QC for genes that pass exonic filter
   all_genes_qc$passes_exonic_filter <- FALSE  # Reset
@@ -549,6 +562,7 @@ if(length(target_regions) > 0) {
     peak_qvalue = target_regions$peak_qvalue,
     exonic_fraction = target_regions$exonic_fraction,
     trimmed_to_exon = target_regions$trimmed_to_exon,
+    peak_rank = best_peaks$actual_peak_rank,
     strategy = paste0("macs2_peak_boundaries_by_", opt$peak_selection_metric),
     stringsAsFactors = FALSE
   )
@@ -567,6 +581,7 @@ if(length(target_regions) > 0) {
     peak_qvalue = numeric(0),
     exonic_fraction = numeric(0),
     trimmed_to_exon = logical(0),
+    peak_rank = integer(0),
     strategy = character(0),
     stringsAsFactors = FALSE
   )

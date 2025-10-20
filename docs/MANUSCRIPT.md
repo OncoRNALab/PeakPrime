@@ -311,12 +311,16 @@ PRIMER_MAX_TM=63.0
 - `peak_pvalue`: Statistical significance
 - `peak_qvalue`: FDR-adjusted p-value
 - `exonic_fraction`: Proportion of window overlapping exons
+- `peak_rank`: Actual rank of the selected peak (1=best, 2=second-best, etc.)
 - `selection_method`: Strategy used for peak selection
+
+**Note**: When a gene has fewer peaks than the requested `peak_rank`, the best available peak (rank 1) is selected, and the `peak_rank` column will reflect the actual rank (1) rather than the requested rank. This helps identify cases where the same peak is selected for different rank parameters.
 
 **Example**:
 ```
-gene	chr	start	end	strand	peak_score	peak_pvalue	exonic_fraction
-ENSG00000067191	chr1	1000000	1000120	+	45.2	1.5e-05	0.95
+gene	chr	start	end	strand	peak_score	peak_pvalue	peak_qvalue	exonic_fraction	peak_rank
+ENSG00000067191	chr1	1000000	1000120	+	45.2	1.5e-05	2.3e-04	0.95	1
+ENSG00000247596	chr2	2000000	2000150	-	32.1	3.2e-04	1.1e-03	0.87	1
 ```
 
 #### 4.2.2 Target Sequences (`selected_peaks.fa`)
