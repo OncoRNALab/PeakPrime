@@ -1,0 +1,17 @@
+name: filter_gtf_env
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  # Core R
+  - r-base=4.3.*
+  
+  # Command-line argument parsing
+  - r-optparse
+  
+  # Bioconductor packages for GTF handling
+  - bioconductor-rtracklayer
+  - bioconductor-genomicranges
+  
+  # Note: Minimal dependencies for fast conda resolution

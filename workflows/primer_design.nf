@@ -13,6 +13,7 @@ include { ALIGN_PRIMERS_TRANSCRIPTOME } from '../modules/ALIGN_PRIMERS_TRANSCRIP
 include { ANALYZE_PRIMER_ALIGNMENTS } from '../modules/ANALYZE_PRIMER_ALIGNMENTS.nf'
 include { SELECT_BEST_PRIMERS } from '../modules/SELECT_BEST_PRIMERS.nf'
 include { OPTIMIZE_PRIMER_ISOFORMS } from '../modules/OPTIMIZE_PRIMER_ISOFORMS.nf'
+include { FILTER_GTF } from '../modules/FILTER_GTF.nf'
 include { MAKEPLOTS_NEW } from '../modules/MAKEPLOTS_NEW.nf'
 include { SUMMARIZE_RESULTS } from '../modules/SUMMARIZE_RESULTS.nf'
 
@@ -112,12 +113,24 @@ workflow primer_design {
         best_primers,
         ANALYZE_PRIMER_ALIGNMENTS.out[1] // primer_alignment_summary.tsv (detailed alignments)
       )
-    }
+    } else {
+      // No transcriptome alignment - create empty channels for emit section
+      best_primers = Channel.empty()
+      optimized_primers = Channel.empty()
+    } // End of transcriptome alignment block
 
     // Optional: Generate plots if --makeplots is enabled
     if (params.makeplots) {
-      // Read gene IDs from file, one per line, and create plotting channel
-      gene_plot_ch = genes_ch.splitText()
+      // Create fresh channels for plotting (genes_ch was already consumed)
+      genes_plot_ch = Channel.fromPath(params.genes, checkIfExists: true)
+      gtf_plot_ch = Channel.fromPath(params.gtf, checkIfExists: true)
+      
+      // Pre-filter GTF to target genes only for faster loading
+      filtered_gtf = FILTER_GTF(gtf_plot_ch, genes_plot_ch)
+      
+      // Read gene IDs from file again for the plotting channel
+      genes_list_ch = Channel.fromPath(params.genes, checkIfExists: true)
+      gene_plot_ch = genes_list_ch.splitText()
         .map { it.trim() }
         .filter { it }
         .map { gene_id ->
@@ -125,16 +138,28 @@ workflow primer_design {
           tuple(gene_id, out_name)
         }
 
-      // Run plotting for each gene
+      // Run plotting for each gene using filtered GTF
+      // Use combine() to pair each gene with the singleton inputs
+      plot_inputs = gene_plot_ch
+        .combine(bw)
+        .combine(filtered_gtf)
+        .combine(peaks_tsv)
+        .combine(primer_targets_bed)
+        .combine(qc_summary)
+        .combine(MACS2_CALLPEAK.out.narrowpeak.map{ it[1] })
+        .map { gene_id, out_name, bw_file, gtf_file, peaks_file, bed_file, qc_file, np_file ->
+          tuple(gene_id, out_name, bw_file, gtf_file, peaks_file, bed_file, qc_file, np_file)
+        }
+
       MAKEPLOTS_NEW(
-        bw,
-        gtf_ch,
-        peaks_tsv,
-        primer_targets_bed,
-        qc_summary,
-        gene_plot_ch.map{ it[0] },
-        gene_plot_ch.map{ it[1] },
-        MACS2_CALLPEAK.out.narrowpeak.map{ it[1] }  // Extract narrowpeak file from tuple
+        plot_inputs.map{ it[2] },  // bw
+        plot_inputs.map{ it[3] },  // filtered_gtf
+        plot_inputs.map{ it[4] },  // peaks_tsv
+        plot_inputs.map{ it[5] },  // primer_targets_bed
+        plot_inputs.map{ it[6] },  // qc_summary
+        plot_inputs.map{ it[0] },  // gene_id
+        plot_inputs.map{ it[1] },  // out_name
+        plot_inputs.map{ it[7] }   // narrowpeak
       )
     }
 
