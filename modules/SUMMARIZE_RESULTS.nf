@@ -1,7 +1,7 @@
 process SUMMARIZE_RESULTS {
   tag 'pipeline_summary'
   publishDir params.outdir, mode: 'copy'
-  conda "python=3.9 pandas=1.5.*"
+  conda "${projectDir}/env/summarize_results_env.yml"
 
   input:
   path best_primers_file, stageAs: 'best_primers.tsv'

@@ -27,6 +27,8 @@ opt_list <- list(
   make_option("--min_peak_score", type="double", default=0, help="Minimum peak score threshold"),
   make_option("--peak_selection_metric", type="character", default="score", help="Metric for selecting best peak per gene: 'score' or 'qvalue'"),
   make_option("--peak_rank", type="integer", default=1, help="Which ranked peak to select per gene: 1 for best, 2 for second-best, etc."),
+  make_option("--select_all_peaks", action="store_true", default=FALSE, help="Select ALL peaks per gene instead of single peak (ignores --peak_rank)"),
+  make_option("--max_peaks_per_gene", type="integer", default=0, help="Maximum peaks per gene in multi-peak mode (0=unlimited)"),
   make_option("--min_exonic_fraction", type="character", default="NA", help="Minimum exonic fraction (or NA to disable)"),
   make_option("--trim_to_exon", type="character", default="false", help="Trim peaks to exon boundaries"),
   make_option("--force_exonic_trimming", type="character", default="false", help="Force trimming to exon+UTR boundaries for primer safety"),
@@ -62,8 +64,26 @@ if (opt$peak_rank < 1 || !is.integer(opt$peak_rank)) {
   stop("Invalid peak_rank: '", opt$peak_rank, "'. Must be a positive integer (1 for best peak, 2 for second-best, etc.)")
 }
 
-cat("Peak selection metric:", opt$peak_selection_metric, "\n")
-cat("Peak rank to select:", opt$peak_rank, "\n")
+# Validate max_peaks_per_gene
+if (opt$max_peaks_per_gene < 0 || !is.integer(opt$max_peaks_per_gene)) {
+  stop("Invalid max_peaks_per_gene: '", opt$max_peaks_per_gene, "'. Must be a non-negative integer (0 for unlimited)")
+}
+
+# Print mode information
+if (opt$select_all_peaks) {
+  cat("=== MULTI-PEAK MODE ENABLED ===\n")
+  cat("  Will select ALL qualifying peaks per gene\n")
+  if (opt$max_peaks_per_gene > 0) {
+    cat("  Limited to top", opt$max_peaks_per_gene, "peaks per gene\n")
+  } else {
+    cat("  No limit on peaks per gene\n")
+  }
+  cat("  Peak selection metric:", opt$peak_selection_metric, "\n")
+} else {
+  cat("=== SINGLE-PEAK MODE (default) ===\n")
+  cat("Peak selection metric:", opt$peak_selection_metric, "\n")
+  cat("Peak rank to select:", opt$peak_rank, "\n")
+}
 
 cat("Loading annotation and gene list...\n")
 
@@ -77,6 +97,68 @@ g_target <- g_all[sel]
 # Get exons by gene for overlap calculations
 ex_by_gene <- exonsBy(txdb, by="gene")
 ex_by_gene <- ex_by_gene[names(ex_by_gene) %in% names(g_target)]
+
+# Create exonic+UTR regions (for primer design, we want to include UTRs)
+# This ensures that 3' UTR peaks are considered "exonic" for primer safety
+cat("Building exonic regions (including UTRs)...\n")
+
+# Pre-fetch UTR data once to avoid repeated calls
+utr5_by_tx <- fiveUTRsByTranscript(txdb, use.names=TRUE)
+utr3_by_tx <- threeUTRsByTranscript(txdb, use.names=TRUE)
+utr5_names <- names(utr5_by_tx)
+utr3_names <- names(utr3_by_tx)
+
+exonic_regions <- list()
+utr_stats <- data.frame(gene_id=character(), n_tx=integer(), n_utr5=integer(), n_utr3=integer(), stringsAsFactors=FALSE)
+
+for(gene_id in names(ex_by_gene)) {
+  # Start with exons
+  regions <- ex_by_gene[[gene_id]]
+  initial_count <- length(regions)
+  
+  # Get transcript names for this gene (UTR functions are indexed by tx_name when use.names=TRUE)
+  gene_tx <- transcriptsBy(txdb, by="gene")[[gene_id]]
+  tx_names <- gene_tx$tx_name
+  
+  # Add 5' UTRs if available - only for transcripts that have 5' UTRs
+  tx_with_utr5 <- tx_names[tx_names %in% utr5_names]
+  if(length(tx_with_utr5) > 0) {
+    utr5_list <- utr5_by_tx[tx_with_utr5]
+    utr5_all <- unlist(GRangesList(utr5_list))
+    regions <- c(regions, utr5_all)
+  }
+  
+  # Add 3' UTRs if available - only for transcripts that have 3' UTRs
+  tx_with_utr3 <- tx_names[tx_names %in% utr3_names]
+  if(length(tx_with_utr3) > 0) {
+    utr3_list <- utr3_by_tx[tx_with_utr3]
+    utr3_all <- unlist(GRangesList(utr3_list))
+    regions <- c(regions, utr3_all)
+  }
+  
+  # Merge all exonic+UTR regions
+  exonic_regions[[gene_id]] <- reduce(regions)
+  
+  # Track statistics
+  utr_stats <- rbind(utr_stats, data.frame(
+    gene_id = gene_id,
+    n_tx = length(tx_names),
+    n_utr5 = length(tx_with_utr5),
+    n_utr3 = length(tx_with_utr3),
+    stringsAsFactors = FALSE
+  ))
+}
+exonic_regions <- GRangesList(exonic_regions)
+
+cat("Completed building exonic+UTR regions for", length(exonic_regions), "genes\n")
+cat("  Genes with 5' UTRs:", sum(utr_stats$n_utr5 > 0), "\n")
+cat("  Genes with 3' UTRs:", sum(utr_stats$n_utr3 > 0), "\n")
+if(any(utr_stats$gene_id == "ENSG00000107130")) {
+  gene_stats <- utr_stats[utr_stats$gene_id == "ENSG00000107130", ]
+  cat("  ENSG00000107130:", gene_stats$n_tx, "transcripts,", gene_stats$n_utr5, "with 5'UTR,", gene_stats$n_utr3, "with 3'UTR\n")
+}
+
+# Keep ex_merged for backward compatibility (exons only)
 ex_merged <- endoapply(ex_by_gene, function(x) reduce(trim(x)))
 
 # Initialize comprehensive QC tracking for ALL target genes
@@ -230,73 +312,140 @@ cat("Found", nrow(peak_gene_map), "peak-gene overlaps for", length(unique(peak_g
 if (opt$peak_selection_metric == "score") {
   # Higher score is better (descending order)
   ordered_peaks <- peak_gene_map[order(peak_gene_map$gene_id, -peaks_gr[peak_gene_map$peak_idx]$score), ]
-  cat("Selecting peaks by highest MACS2 score (rank ", opt$peak_rank, ")\n")
+  cat("Ordering peaks by highest MACS2 score\n")
 } else if (opt$peak_selection_metric == "qvalue") {
   # Higher -log10(qvalue) is better (descending order) - MACS2 stores -log10(q-value)
   ordered_peaks <- peak_gene_map[order(peak_gene_map$gene_id, -peaks_gr[peak_gene_map$peak_idx]$qvalue), ]
-  cat("Selecting peaks by highest -log10(q-value) (rank ", opt$peak_rank, ")\n")
+  cat("Ordering peaks by highest -log10(q-value)\n")
 }
 
-# Select the peak at the specified rank for each gene
-selected_peaks <- data.frame()
-genes_without_rank <- character(0)
+# Add peak rank column (rank within each gene)
+ordered_peaks$peak_rank <- ave(rep(1, nrow(ordered_peaks)), ordered_peaks$gene_id, FUN=seq_along)
 
-for(gene in unique(ordered_peaks$gene_id)) {
-  gene_peaks <- ordered_peaks[ordered_peaks$gene_id == gene, ]
+# Select peaks based on mode
+if (opt$select_all_peaks) {
+  # MULTI-PEAK MODE: Select all peaks (or top N if max_peaks_per_gene is set)
+  cat("Selecting ALL peaks per gene...\n")
   
-  if(nrow(gene_peaks) >= opt$peak_rank) {
-    # Select the peak at the specified rank
-    peak_row <- gene_peaks[opt$peak_rank, ]
-    peak_row$actual_peak_rank <- opt$peak_rank
-    selected_peaks <- rbind(selected_peaks, peak_row)
+  if (opt$max_peaks_per_gene > 0) {
+    # Limit to top N peaks per gene
+    selected_peaks <- ordered_peaks[ordered_peaks$peak_rank <= opt$max_peaks_per_gene, ]
+    cat("  Limited to top", opt$max_peaks_per_gene, "peaks per gene\n")
   } else {
-    # Not enough peaks for this gene at the requested rank
-    # Select the best available peak (rank 1) but mark it with the requested rank
-    peak_row <- gene_peaks[1, ]
-    peak_row$actual_peak_rank <- 1  # The actual rank of the selected peak
-    selected_peaks <- rbind(selected_peaks, peak_row)
-    genes_without_rank <- c(genes_without_rank, gene)
-    cat("Warning: Gene", gene, "has only", nrow(gene_peaks), "peak(s), cannot select rank", opt$peak_rank, 
-        "- using rank 1 instead\n")
+    # No limit - select all peaks
+    selected_peaks <- ordered_peaks
   }
-}
-
-# Track genes that couldn't get the requested rank
-if(length(genes_without_rank) > 0) {
-  cat("Genes without sufficient peaks for rank", opt$peak_rank, ":", length(genes_without_rank), "\n")
-  # Update QC for genes without sufficient peaks
-  all_genes_qc$failure_reason[all_genes_qc$gene_id %in% genes_without_rank] <- 
-    paste0("Insufficient peaks for rank ", opt$peak_rank, " (only ", 
-           sapply(genes_without_rank, function(g) sum(ordered_peaks$gene_id == g)), 
-           " peak(s) available)")
+  
+  selected_peaks$actual_peak_rank <- selected_peaks$peak_rank
+  
+  # Report statistics
+  peaks_per_gene <- table(selected_peaks$gene_id)
+  cat("Selected", nrow(selected_peaks), "peaks for", length(unique(selected_peaks$gene_id)), "genes\n")
+  cat("  Peaks per gene: min=", min(peaks_per_gene), 
+      " max=", max(peaks_per_gene), 
+      " median=", median(peaks_per_gene), 
+      " mean=", round(mean(peaks_per_gene), 1), "\n")
+  
+  # Track which genes got selected
+  genes_with_selected_peaks <- unique(selected_peaks$gene_id)
+  
+} else {
+  # SINGLE-PEAK MODE: Select the peak at specified rank for each gene
+  cat("Selecting rank", opt$peak_rank, "peak per gene...\n")
+  
+  selected_peaks <- data.frame()
+  genes_without_rank <- character(0)
+  
+  for(gene in unique(ordered_peaks$gene_id)) {
+    gene_peaks <- ordered_peaks[ordered_peaks$gene_id == gene, ]
+    
+    if(nrow(gene_peaks) >= opt$peak_rank) {
+      # Select the peak at the specified rank
+      peak_row <- gene_peaks[opt$peak_rank, ]
+      peak_row$actual_peak_rank <- opt$peak_rank
+      selected_peaks <- rbind(selected_peaks, peak_row)
+    } else {
+      # Not enough peaks for this gene at the requested rank
+      # Select the best available peak (rank 1) but mark it with the requested rank
+      peak_row <- gene_peaks[1, ]
+      peak_row$actual_peak_rank <- 1  # The actual rank of the selected peak
+      selected_peaks <- rbind(selected_peaks, peak_row)
+      genes_without_rank <- c(genes_without_rank, gene)
+      cat("Warning: Gene", gene, "has only", nrow(gene_peaks), "peak(s), cannot select rank", opt$peak_rank, 
+          "- using rank 1 instead\n")
+    }
+  }
+  
+  # Track genes that couldn't get the requested rank
+  if(length(genes_without_rank) > 0) {
+    cat("Genes without sufficient peaks for rank", opt$peak_rank, ":", length(genes_without_rank), "\n")
+  }
+  
+  genes_with_selected_peaks <- unique(selected_peaks$gene_id)
 }
 
 best_peaks <- selected_peaks
 
-# Track which genes get selected peaks
-genes_with_best_peaks <- unique(best_peaks$gene_id)
-all_genes_qc$is_best_peak[all_genes_qc$gene_id %in% genes_with_best_peaks] <- TRUE
-rank_description <- if(opt$peak_rank == 1) "best peak" else if(opt$peak_rank == 2) "second-best peak" else paste0(opt$peak_rank, "th-ranked peak")
-all_genes_qc$failure_reason[all_genes_qc$gene_id %in% genes_with_best_peaks] <- paste0("Selected as ", rank_description, " (by ", opt$peak_selection_metric, ")")
+# Update QC tracking
+all_genes_qc$is_best_peak[all_genes_qc$gene_id %in% genes_with_selected_peaks] <- TRUE
 
-# Store best peak statistics
+# Store peak selection info in QC
+if (opt$select_all_peaks) {
+  # Multi-peak mode: track how many peaks per gene
+  peaks_per_gene_count <- table(best_peaks$gene_id)
+  for(gene in names(peaks_per_gene_count)) {
+    qc_idx <- which(all_genes_qc$gene_id == gene)
+    n_peaks <- peaks_per_gene_count[gene]
+    all_genes_qc$failure_reason[qc_idx] <- paste0("Selected ", n_peaks, " peak(s) in multi-peak mode (by ", opt$peak_selection_metric, ")")
+  }
+  
+  # For genes without selected peaks
+  genes_without_selection <- setdiff(all_genes_qc$gene_id[all_genes_qc$has_overlapping_peaks], genes_with_selected_peaks)
+  if (length(genes_without_selection) > 0) {
+    all_genes_qc$failure_reason[all_genes_qc$gene_id %in% genes_without_selection] <- 
+      "No peaks met selection criteria in multi-peak mode"
+  }
+} else {
+  # Single-peak mode: track which rank selected
+  rank_description <- if(opt$peak_rank == 1) "best peak" else if(opt$peak_rank == 2) "second-best peak" else paste0(opt$peak_rank, "th-ranked peak")
+  all_genes_qc$failure_reason[all_genes_qc$gene_id %in% genes_with_selected_peaks] <- paste0("Selected as ", rank_description, " (by ", opt$peak_selection_metric, ")")
+  
+  # Track genes without sufficient peaks
+  if(exists("genes_without_rank") && length(genes_without_rank) > 0) {
+    all_genes_qc$failure_reason[all_genes_qc$gene_id %in% genes_without_rank] <- 
+      paste0("Insufficient peaks for rank ", opt$peak_rank, " (only ", 
+             sapply(genes_without_rank, function(g) sum(ordered_peaks$gene_id == g)), 
+             " peak(s) available)")
+  }
+}
+
+# Store best peak statistics (for all selected peaks in multi-peak mode)
 for(i in 1:nrow(best_peaks)) {
   gene_id <- best_peaks$gene_id[i]
   peak_idx <- best_peaks$peak_idx[i]
+  peak_rank <- best_peaks$actual_peak_rank[i]
   qc_idx <- which(all_genes_qc$gene_id == gene_id)
   
-  all_genes_qc$best_peak_score[qc_idx] <- peaks_gr[peak_idx]$score
-  all_genes_qc$best_peak_pvalue[qc_idx] <- peaks_gr[peak_idx]$pvalue
-  all_genes_qc$best_peak_qvalue[qc_idx] <- peaks_gr[peak_idx]$qvalue
-  
-  # Store selected peak coordinates (before any trimming)
-  all_genes_qc$peak_chr[qc_idx] <- as.character(seqnames(peaks_gr[peak_idx]))
-  all_genes_qc$peak_start[qc_idx] <- start(peaks_gr[peak_idx])
-  all_genes_qc$peak_end[qc_idx] <- end(peaks_gr[peak_idx])
-  all_genes_qc$peak_strand[qc_idx] <- as.character(strand(peaks_gr[peak_idx]))
+  # In single-peak mode, store in standard columns
+  # In multi-peak mode, only store for rank 1 (best peak) in standard columns
+  if (!opt$select_all_peaks || peak_rank == 1) {
+    all_genes_qc$best_peak_score[qc_idx] <- peaks_gr[peak_idx]$score
+    all_genes_qc$best_peak_pvalue[qc_idx] <- peaks_gr[peak_idx]$pvalue
+    all_genes_qc$best_peak_qvalue[qc_idx] <- peaks_gr[peak_idx]$qvalue
+    
+    # Store selected peak coordinates (before any trimming)
+    all_genes_qc$peak_chr[qc_idx] <- as.character(seqnames(peaks_gr[peak_idx]))
+    all_genes_qc$peak_start[qc_idx] <- start(peaks_gr[peak_idx])
+    all_genes_qc$peak_end[qc_idx] <- end(peaks_gr[peak_idx])
+    all_genes_qc$peak_strand[qc_idx] <- as.character(strand(peaks_gr[peak_idx]))
+  }
 }
 
-cat("Selected", nrow(best_peaks), "best peaks (one per gene)\n")
+if (opt$select_all_peaks) {
+  cat("Selected", nrow(best_peaks), "peaks total (multiple per gene)\n")
+} else {
+  cat("Selected", nrow(best_peaks), "best peaks (one per gene)\n")
+}
 
 # Process selected peaks
 selected_peaks_gr <- peaks_gr[best_peaks$peak_idx]
@@ -333,14 +482,14 @@ trimmed_to_exon <- logical(length(target_regions))
 for(i in seq_along(target_regions)) {
   gene_id <- target_regions$gene_id[i]
   
-  # Get exons for this gene
-  if(gene_id %in% names(ex_merged)) {
-    exons <- ex_merged[[gene_id]]
+  # Get exonic+UTR regions for this gene (for primer design, UTRs are considered "exonic")
+  if(gene_id %in% names(exonic_regions)) {
+    exons <- exonic_regions[[gene_id]]
     
-    # Calculate overlap with exons
-    overlaps_exon <- findOverlaps(target_regions[i], exons)
+    # Calculate overlap with exonic+UTR regions (ignore strand for peak overlaps)
+    overlaps_exon <- findOverlaps(target_regions[i], exons, ignore.strand=TRUE)
     if(length(overlaps_exon) > 0) {
-      intersect_ranges <- intersect(target_regions[i], exons[subjectHits(overlaps_exon)])
+      intersect_ranges <- intersect(target_regions[i], exons[subjectHits(overlaps_exon)], ignore.strand=TRUE)
       exonic_bases <- sum(width(intersect_ranges))
       exonic_fractions[i] <- exonic_bases / width(target_regions[i])
     } else {
@@ -353,7 +502,7 @@ for(i in seq_along(target_regions)) {
       if(force_exonic_trimming && length(overlaps_exon) > 0) {
         # Find all overlapping exonic regions
         overlapping_exons <- exons[subjectHits(overlaps_exon)]
-        intersect_ranges_all <- intersect(target_regions[i], overlapping_exons)
+        intersect_ranges_all <- intersect(target_regions[i], overlapping_exons, ignore.strand=TRUE)
         
         if(length(intersect_ranges_all) > 0) {
           # Use the largest continuous exonic region
@@ -411,9 +560,9 @@ for(i in seq_along(target_regions)) {
           trimmed_to_exon[i] <- TRUE
           
           # Recalculate exonic fraction
-          overlaps_exon_new <- findOverlaps(target_regions[i], exons)
+          overlaps_exon_new <- findOverlaps(target_regions[i], exons, ignore.strand=TRUE)
           if(length(overlaps_exon_new) > 0) {
-            intersect_ranges_new <- intersect(target_regions[i], exons[subjectHits(overlaps_exon_new)])
+            intersect_ranges_new <- intersect(target_regions[i], exons[subjectHits(overlaps_exon_new)], ignore.strand=TRUE)
             exonic_fractions[i] <- sum(width(intersect_ranges_new)) / width(target_regions[i])
           } else {
             exonic_fractions[i] <- 0
@@ -441,21 +590,29 @@ all_genes_qc$passes_exonic_filter[all_genes_qc$gene_id %in% target_regions$gene_
 
 # Special handling for forced trimming failures
 if(force_exonic_trimming) {
-  # Filter out peaks that failed forced trimming (no exonic overlap or too short after trimming)
-  failed_trimming <- target_regions$gene_id[!trimmed_to_exon & exonic_fractions == 0]
-  if(length(failed_trimming) > 0) {
-    keep_idx <- !(target_regions$gene_id %in% failed_trimming)
-    genes_before_trimming <- target_regions$gene_id
-    target_regions <- target_regions[keep_idx]
+  # Filter out INDIVIDUAL PEAKS that failed forced trimming (no exonic overlap or too short after trimming)
+  # In multi-peak mode, we want to keep successful peaks even if other peaks from the same gene failed
+  failed_peak_idx <- !trimmed_to_exon & exonic_fractions == 0
+  if(any(failed_peak_idx)) {
+    n_failed_peaks <- sum(failed_peak_idx)
+    failed_genes <- unique(target_regions$gene_id[failed_peak_idx])
     
-    # Also filter best_peaks to keep them in sync
-    best_peaks <- best_peaks[!(best_peaks$gene_id %in% failed_trimming), ]
+    # Keep only peaks that passed trimming
+    target_regions <- target_regions[!failed_peak_idx]
+    best_peaks <- best_peaks[!failed_peak_idx, ]
     
-    # Update QC for genes that failed forced trimming
-    all_genes_qc$passes_exonic_filter[all_genes_qc$gene_id %in% failed_trimming] <- FALSE
-    all_genes_qc$failure_reason[all_genes_qc$gene_id %in% failed_trimming] <- "Failed forced exonic trimming (no exonic overlap or trimmed region too short)"
+    cat("Removed", n_failed_peaks, "peak(s) from", length(failed_genes), "gene(s) due to failed forced exonic trimming\n")
     
-    cat("Removed", length(failed_trimming), "genes due to failed forced exonic trimming\n")
+    # Update QC: only mark genes as failed if ALL their peaks failed
+    # Check which genes have NO peaks left after filtering
+    genes_with_remaining_peaks <- unique(target_regions$gene_id)
+    genes_completely_failed <- setdiff(failed_genes, genes_with_remaining_peaks)
+    
+    if(length(genes_completely_failed) > 0) {
+      all_genes_qc$passes_exonic_filter[all_genes_qc$gene_id %in% genes_completely_failed] <- FALSE
+      all_genes_qc$failure_reason[all_genes_qc$gene_id %in% genes_completely_failed] <- "Failed forced exonic trimming (no exonic overlap or trimmed region too short for ALL peaks)"
+      cat("  Of these,", length(genes_completely_failed), "gene(s) had ALL peaks fail\n")
+    }
   }
 }
 
@@ -514,13 +671,28 @@ if(length(target_regions) > 0 && opt$fasta != "NO_FILE" && file.exists(opt$fasta
   on.exit(Rsamtools::close.FaFile(fasta_file), add = TRUE)
   
   sequences <- Rsamtools::getSeq(fasta_file, target_regions)
-  names(sequences) <- paste0(
-    target_regions$gene_id, "|",
-    seqnames(target_regions), ":",
-    start(target_regions), "-",
-    end(target_regions), "(",
-    strand(target_regions), ")"
-  )
+  
+  # Generate sequence names with peak identifiers
+  if (opt$select_all_peaks) {
+    # Multi-peak mode: include peak rank in identifier
+    # Format: ENSG00000123456|peak_1 chr1:1000-1300(+)
+    names(sequences) <- paste0(
+      target_regions$gene_id, "|peak_", best_peaks$actual_peak_rank, " ",
+      seqnames(target_regions), ":",
+      start(target_regions), "-",
+      end(target_regions), "(",
+      strand(target_regions), ")"
+    )
+  } else {
+    # Single-peak mode: original format
+    names(sequences) <- paste0(
+      target_regions$gene_id, "|",
+      seqnames(target_regions), ":",
+      start(target_regions), "-",
+      end(target_regions), "(",
+      strand(target_regions), ")"
+    )
+  }
   
   Biostrings::writeXStringSet(sequences, filepath = opt$out_fa)
 } else {
@@ -534,11 +706,21 @@ if(length(target_regions) > 0 && opt$fasta != "NO_FILE" && file.exists(opt$fasta
 
 # Create BED file
 if(length(target_regions) > 0) {
+  # Generate name field with peak identifiers
+  if (opt$select_all_peaks) {
+    # Multi-peak mode: include peak rank in name
+    # Format: ENSG00000123456_peak_1
+    bed_names <- paste0(target_regions$gene_id, "_peak_", best_peaks$actual_peak_rank)
+  } else {
+    # Single-peak mode: original format
+    bed_names <- paste0(target_regions$gene_id, "_peak")
+  }
+  
   bed_df <- data.frame(
     chr = seqnames(target_regions),
     start = start(target_regions) - 1, # BED is 0-based
     end = end(target_regions),
-    name = paste0(target_regions$gene_id, "_peak"),
+    name = bed_names,
     score = target_regions$peak_score,
     strand = strand(target_regions)
   )

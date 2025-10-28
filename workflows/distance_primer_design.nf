@@ -71,11 +71,11 @@ workflow distance_primer_design {
     // Convert primers to FASTA for alignment (simple version without gene grouping)
     primers_fasta = SIMPLE_PRIMERS_TO_FASTA(primer3_output)
 
-    // Handle optional transcriptome FASTA for gene name mapping
-    if (params.transcriptome_fasta) {
-      transcriptome_fasta_ch = Channel.fromPath(params.transcriptome_fasta, checkIfExists: true)
+    // Handle optional transcript mapping file for gene name mapping
+    if (params.transcript_mapping && file(params.transcript_mapping).exists()) {
+      transcript_mapping_ch = Channel.fromPath(params.transcript_mapping, checkIfExists: true)
     } else {
-      transcriptome_fasta_ch = Channel.value(file('NO_FILE'))
+      transcript_mapping_ch = Channel.value(file('NO_FILE'))
     }
 
     // Optional: Align primers to transcriptome for specificity checking
@@ -101,7 +101,7 @@ workflow distance_primer_design {
         alignment_results[0], // BAM file
         alignment_results[1], // BAI file  
         primers_tsv,          // Converted TSV format
-        transcriptome_fasta_ch
+        transcript_mapping_ch
       )
       
       // Select best primers based on alignment summary

@@ -13,6 +13,7 @@ include { ALIGN_PRIMERS_TRANSCRIPTOME } from '../modules/ALIGN_PRIMERS_TRANSCRIP
 include { ANALYZE_PRIMER_ALIGNMENTS } from '../modules/ANALYZE_PRIMER_ALIGNMENTS.nf'
 include { SELECT_BEST_PRIMERS } from '../modules/SELECT_BEST_PRIMERS.nf'
 include { OPTIMIZE_PRIMER_ISOFORMS } from '../modules/OPTIMIZE_PRIMER_ISOFORMS.nf'
+include { OPTIMIZE_PRIMERS_MULTIPEAK } from '../modules/OPTIMIZE_PRIMERS_MULTIPEAK.nf'
 include { FILTER_GTF } from '../modules/FILTER_GTF.nf'
 include { MAKEPLOTS_NEW } from '../modules/MAKEPLOTS_NEW.nf'
 include { SUMMARIZE_RESULTS } from '../modules/SUMMARIZE_RESULTS.nf'
@@ -51,11 +52,11 @@ workflow primer_design {
     transcriptome_index_prefix = 'NO_INDEX'
   }
 
-  // Handle optional transcriptome FASTA for gene name mapping
-  if (params.transcriptome_fasta) {
-    transcriptome_fasta_ch = Channel.fromPath(params.transcriptome_fasta, checkIfExists: true)
+  // Handle optional transcript mapping file for gene name mapping
+  if (params.transcript_mapping && file(params.transcript_mapping).exists()) {
+    transcript_mapping_ch = Channel.fromPath(params.transcript_mapping, checkIfExists: true)
   } else {
-    transcriptome_fasta_ch = Channel.value(file('NO_FILE'))
+    transcript_mapping_ch = Channel.value(file('NO_FILE'))
   }
 
   main:
@@ -103,16 +104,28 @@ workflow primer_design {
         alignment_results[0], // BAM file
         alignment_results[1], // BAI file  
         cdna_primers,
-        transcriptome_fasta_ch
+        transcript_mapping_ch
       )
       // Select best primers based on alignment summary
       best_primers = SELECT_BEST_PRIMERS(ANALYZE_PRIMER_ALIGNMENTS.out[0], ANALYZE_PRIMER_ALIGNMENTS.out[1])
       
-      // Optimize primer selection to maximize distinct isoform coverage
-      optimized_primers = OPTIMIZE_PRIMER_ISOFORMS(
-        best_primers,
-        ANALYZE_PRIMER_ALIGNMENTS.out[1] // primer_alignment_summary.tsv (detailed alignments)
-      )
+      // Choose optimization strategy based on multi-peak mode
+      if (params.optimize_multipeak && params.select_all_peaks) {
+        // Multi-peak mode: use distance-based scoring across all peaks
+        log.info "Multi-peak optimization enabled: scoring primers across all peaks per gene"
+        OPTIMIZE_PRIMERS_MULTIPEAK(
+          best_primers,
+          ANALYZE_PRIMER_ALIGNMENTS.out[1] // primer_alignment_summary.tsv
+        )
+        optimized_primers = OPTIMIZE_PRIMERS_MULTIPEAK.out.optimized_primers
+      } else {
+        // Single-peak mode: optimize for isoform coverage (original behavior)
+        OPTIMIZE_PRIMER_ISOFORMS(
+          best_primers,
+          ANALYZE_PRIMER_ALIGNMENTS.out[1] // primer_alignment_summary.tsv (detailed alignments)
+        )
+        optimized_primers = OPTIMIZE_PRIMER_ISOFORMS.out.optimized_primers
+      }
     } else {
       // No transcriptome alignment - create empty channels for emit section
       best_primers = Channel.empty()
@@ -177,4 +190,6 @@ workflow primer_design {
     primers_fasta
     best_primers
     optimized_primers
+    // Note: optimized_primers will contain either single-peak or multi-peak optimization results
+    // depending on params.optimize_multipeak and params.select_all_peaks flags
 }

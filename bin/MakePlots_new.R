@@ -178,6 +178,9 @@ plot_gene_with_window <- function(
       window_start <- gene_start
       window_end   <- gene_end
     } else {
+      # Detect multi-peak mode: if there are multiple peaks for this gene, don't highlight a single peak
+      is_multipeak <- nrow(prow) > 1
+      
       window_start <- as.integer(prow$start[1])
       window_end   <- as.integer(prow$end[1])
       if (is.na(window_start) || is.na(window_end)) {
@@ -185,7 +188,12 @@ plot_gene_with_window <- function(
         window_start <- gene_start
         window_end   <- gene_end
       } else {
-        has_peaks <- TRUE
+        # Only set has_peaks to TRUE if single peak mode (to enable highlighting)
+        # In multi-peak mode, has_peaks stays FALSE to skip highlighting
+        has_peaks <- !is_multipeak
+        if (is_multipeak) {
+          message(sprintf("Multi-peak mode detected for %s (%d peaks) - skipping peak highlight", gene_id, nrow(prow)))
+        }
       }
     }
   }

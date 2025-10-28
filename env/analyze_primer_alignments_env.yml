@@ -1,0 +1,10 @@
+name: analyze_primer_alignments_env
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - python=3.9
+  - biopython=1.79
+  - pandas=1.5.*
+  - pysam=0.21.*

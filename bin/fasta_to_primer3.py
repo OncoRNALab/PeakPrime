@@ -44,18 +44,31 @@ def create_primer3_input(sequences, settings, output_file):
     with open(output_file, 'w') as f:
         for i, (header, sequence) in enumerate(sequences):
             # Extract sequence ID from header
-            # Priority: 1) Use part before '|' if present (for gene|info format)
-            #          2) Use first word of header (for simple IDs like "ERCC_00002")
-            #          3) Fall back to seq_N if header is empty
+            # MODIFIED: Preserve peak identifiers in multi-peak mode
+            # Format: ENSG00000123456|peak_N chr1:1000-1300(+)
+            # We want to keep "ENSG00000123456|peak_N" as the SEQUENCE_ID
+            
             if '|' in header:
-                gene_id = header.split('|')[0]
+                # Split by '|' to separate gene_id and additional info
+                parts = header.split('|')
+                gene_id = parts[0]
+                
+                # Check if this is multi-peak format (has peak_N identifier)
+                if len(parts) > 1 and parts[1].strip().split()[0].startswith('peak_'):
+                    # Extract peak identifier (e.g., "peak_1" from "peak_1 chr1:1000-1300(+)")
+                    peak_info = parts[1].strip().split()[0]  # Get "peak_1"
+                    # Preserve both gene ID and peak identifier
+                    sequence_id = f"{gene_id}|{peak_info}"
+                else:
+                    # Not multi-peak format, just use gene_id
+                    sequence_id = gene_id
             elif header:
-                gene_id = header.split()[0]  # First word
+                sequence_id = header.split()[0]  # First word
             else:
-                gene_id = f"seq_{i+1}"
+                sequence_id = f"seq_{i+1}"
             
             # Write sequence identifier
-            f.write(f"SEQUENCE_ID={gene_id}\n")
+            f.write(f"SEQUENCE_ID={sequence_id}\n")
             
             # Write sequence template
             f.write(f"SEQUENCE_TEMPLATE={sequence}\n")

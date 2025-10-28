@@ -95,10 +95,20 @@ def analyze_alignments(alignment_bam, primers_tsv, transcriptome_fasta=None,
     
     # Create primer_id if it doesn't exist (for backward compatibility)
     if 'primer_id' not in primers.columns:
-        primers['primer_id'] = (primers['gene_id'].astype(str) + "|" +
-                               "idx" + primers['primer_index'].astype(str) + "|" +
-                               primers['primer_type'].astype(str) + "|" +
-                               "strand" + primers['gene_strand'].astype(str))
+        # Check if peak_id column exists (multi-peak mode)
+        if 'peak_id' in primers.columns and primers['peak_id'].notna().any():
+            # Multi-peak mode: include peak_id in primer_id
+            primers['primer_id'] = (primers['gene_id'].astype(str) + "|" +
+                                   primers['peak_id'].astype(str) + "|" +
+                                   "idx" + primers['primer_index'].astype(str) + "|" +
+                                   primers['primer_type'].astype(str) + "|" +
+                                   "strand" + primers['gene_strand'].astype(str))
+        else:
+            # Single-peak mode: original format
+            primers['primer_id'] = (primers['gene_id'].astype(str) + "|" +
+                                   "idx" + primers['primer_index'].astype(str) + "|" +
+                                   primers['primer_type'].astype(str) + "|" +
+                                   "strand" + primers['gene_strand'].astype(str))
     
     # Create a lookup dictionary for gene strand information
     primer_to_gene_strand = dict(zip(primers['primer_id'], primers['gene_strand']))
@@ -312,8 +322,8 @@ def main():
     parser = argparse.ArgumentParser(description="Analyze primer alignment results from bowtie2")
     parser.add_argument('--alignment_bam', required=True, help='Input BAM file from bowtie2 alignment')
     parser.add_argument('--primers_tsv', required=True, help='Original primers TSV file')
-    parser.add_argument('--transcriptome_fasta', help='Transcriptome FASTA file for gene name mapping')
-    parser.add_argument('--transcript_mapping', help='Pre-built transcript-to-gene mapping TSV file (faster alternative to FASTA)')
+    parser.add_argument('--transcript_mapping', help='Transcript-to-gene mapping TSV file (columns: transcript_id, gene_name)')
+    parser.add_argument('--transcriptome_fasta', help='Deprecated: Use --transcript_mapping instead. Transcriptome FASTA for gene name mapping (slower)')
     parser.add_argument('--out_report', default='primer_alignment_report.tsv', help='Output alignment report')
     parser.add_argument('--out_summary', default='primer_alignment_summary.tsv', help='Detailed alignment summary per primer')
     
@@ -322,6 +332,10 @@ def main():
     if not args.alignment_bam or not args.primers_tsv:
         print("Error: Both --alignment_bam and --primers_tsv are required")
         sys.exit(1)
+    
+    # Warn if using deprecated parameter
+    if args.transcriptome_fasta and not args.transcript_mapping:
+        print("Warning: --transcriptome_fasta is deprecated. Consider using --transcript_mapping for better performance.")
     
     analyze_alignments(
         alignment_bam=args.alignment_bam,

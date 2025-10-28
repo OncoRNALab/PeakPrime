@@ -56,9 +56,18 @@ def load_data(best_primers_file: str, alignment_summary_file: str,
         sys.exit(1)
     
     # Filter alignment summary to only best primers
+    # CRITICAL: Must match on BOTH gene_id AND primer_index, as primer_index alone is not unique
+    # Create composite key for filtering
+    best_primers_keys = set(
+        zip(best_primers['gene_id'], best_primers['primer_index'].astype(str))
+    )
+    alignment_summary['composite_key'] = list(
+        zip(alignment_summary['gene_id'], alignment_summary['primer_index'].astype(str))
+    )
     alignment_summary = alignment_summary[
-        alignment_summary['primer_index'].isin(best_primers['primer_index'])
+        alignment_summary['composite_key'].isin(best_primers_keys)
     ].copy()
+    alignment_summary = alignment_summary.drop('composite_key', axis=1)
     print(f"  Filtered to {len(alignment_summary)} alignments for validated primers")
     
     # Apply quality filters to alignments

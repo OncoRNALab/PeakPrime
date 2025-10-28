@@ -1,7 +1,7 @@
 process MEGADEPTH_BW {
   tag "$bam.baseName"
   publishDir params.outdir, mode: 'copy', pattern: '*.bw'
-  conda "megadepth=1.2.* samtools=1.19"
+  conda "${projectDir}/env/megadepth_env.yml"
 
   input:
   path bam

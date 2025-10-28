@@ -25,24 +25,50 @@ cat("Input primers:", nrow(primers), "from", length(unique(primers$gene_id)), "g
 
 # Limit to max_primers_per_gene (take first N primers per gene, assuming they're sorted by quality)
 if (!is.na(opt$max_primers_per_gene) && opt$max_primers_per_gene > 0) {
-  primers_filtered <- do.call(rbind, lapply(split(primers, primers$gene_id), function(gene_primers) {
-    head(gene_primers, opt$max_primers_per_gene)
-  }))
-  primers <- primers_filtered
-  cat("Filtered to:", nrow(primers), "primers (max", opt$max_primers_per_gene, "per gene)\n")
+  # In multi-peak mode, limit per gene+peak combination, not just per gene
+  if ("peak_id" %in% colnames(primers) && any(!is.na(primers$peak_id))) {
+    # Multi-peak mode: group by gene_id AND peak_id
+    primers$group_key <- paste0(primers$gene_id, "|", primers$peak_id)
+    primers_filtered <- do.call(rbind, lapply(split(primers, primers$group_key), function(group_primers) {
+      head(group_primers, opt$max_primers_per_gene)
+    }))
+    primers_filtered$group_key <- NULL  # Remove temporary column
+    primers <- primers_filtered
+    cat("Filtered to:", nrow(primers), "primers (max", opt$max_primers_per_gene, "per gene+peak)\n")
+  } else {
+    # Single-peak mode: group by gene_id only
+    primers_filtered <- do.call(rbind, lapply(split(primers, primers$gene_id), function(gene_primers) {
+      head(gene_primers, opt$max_primers_per_gene)
+    }))
+    primers <- primers_filtered
+    cat("Filtered to:", nrow(primers), "primers (max", opt$max_primers_per_gene, "per gene)\n")
+  }
 }
 
 # Create FASTA sequences
 sequences <- DNAStringSet(primers$primer_sequence)
 
 # Create descriptive FASTA headers
-# Format: >gene_id|primer_index|primer_type|strand
-headers <- paste0(
-  primers$gene_id, "|",
-  "idx", primers$primer_index, "|",
-  primers$primer_type, "|",
-  "strand", primers$gene_strand
-)
+# Format: >gene_id|peak_id|primer_index|primer_type|strand
+# If peak_id is NA (single-peak mode), omit it from the header
+if ("peak_id" %in% colnames(primers) && any(!is.na(primers$peak_id))) {
+  # Multi-peak mode: include peak_id in header
+  headers <- paste0(
+    primers$gene_id, "|",
+    primers$peak_id, "|",
+    "idx", primers$primer_index, "|",
+    primers$primer_type, "|",
+    "strand", primers$gene_strand
+  )
+} else {
+  # Single-peak mode: original format without peak_id
+  headers <- paste0(
+    primers$gene_id, "|",
+    "idx", primers$primer_index, "|",
+    primers$primer_type, "|",
+    "strand", primers$gene_strand
+  )
+}
 
 names(sequences) <- headers
 

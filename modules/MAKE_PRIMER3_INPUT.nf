@@ -1,7 +1,7 @@
 process MAKE_PRIMER3_INPUT {
   tag "$targets.baseName"
   publishDir params.outdir, mode: 'copy'
-  conda "python>=3.10 primer3=2.6.*"
+  conda "${projectDir}/env/primer3_env.yml"
 
   input:
   path targets

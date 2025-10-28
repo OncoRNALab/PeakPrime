@@ -1,7 +1,7 @@
 process ALIGN_PRIMERS_TRANSCRIPTOME {
   tag 'bowtie2_alignment'
   publishDir params.outdir, mode: 'copy'
-  conda "bowtie2=2.5.* samtools=1.19"
+  conda "${projectDir}/env/align_primers_env.yml"
 
   input:
   path primers_fasta

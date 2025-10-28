@@ -3,7 +3,7 @@ process MAKEPLOTS_NEW {
   conda "${projectDir}/env/makeplots_env.yml"
   // Alternative inline: conda "r-base=4.3.* r-ggplot2 r-data.table r-optparse r-patchwork r-cowplot bioconductor-genomicranges bioconductor-rtracklayer bioconductor-iranges bioconductor-s4vectors bioconductor-genomicfeatures"
   tag "$gene_id"
-  publishDir params.outdir, mode: 'copy'
+  publishDir "${params.outdir}/plots", mode: 'copy'
   errorStrategy 'ignore'  // Continue pipeline even if individual plots fail
 
   input:

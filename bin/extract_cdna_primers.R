@@ -37,7 +37,21 @@ missing_cols <- setdiff(required_cols, colnames(peaks))
 if (length(missing_cols) > 0) {
   stop("Peaks file is missing required columns: ", paste(missing_cols, collapse=", "))
 }
-gene_strands <- setNames(as.character(peaks$strand), as.character(peaks$gene))
+
+# Create lookup for strand information
+# In multi-peak mode, we need to handle multiple peaks per gene
+# Key format: "ENSG00000123456|peak_N" or just "ENSG00000123456" for single-peak
+if ("peak_rank" %in% colnames(peaks)) {
+  # Multi-peak mode: create keys with peak identifiers
+  peak_keys <- paste0(peaks$gene, "|peak_", peaks$peak_rank)
+  gene_strands <- setNames(as.character(peaks$strand), peak_keys)
+  # Also keep gene-only keys for backward compatibility (use first occurrence)
+  gene_only <- setNames(as.character(peaks$strand), as.character(peaks$gene))
+  gene_strands <- c(gene_strands, gene_only[!names(gene_only) %in% names(gene_strands)])
+} else {
+  # Single-peak mode: original behavior
+  gene_strands <- setNames(as.character(peaks$strand), as.character(peaks$gene))
+}
 
 # Parse Primer3 output
 parse_primer3_output <- function(file_path) {
@@ -101,6 +115,7 @@ if (is.null(primer_data) || length(primer_data) == 0) {
 # Extract cDNA-complementary primers
 cdna_primers <- data.frame(
   gene_id = character(),
+  peak_id = character(),
   primer_index = integer(),
   primer_type = character(),
   primer_sequence = character(),
@@ -109,14 +124,35 @@ cdna_primers <- data.frame(
   stringsAsFactors = FALSE
 )
 
-for (gene_id in names(primer_data)) {
-  if (!gene_id %in% names(gene_strands)) {
-    cat("Warning: Gene", gene_id, "not found in peaks data, skipping\n")
+for (sequence_id in names(primer_data)) {
+  # Parse sequence_id to extract gene_id and peak_id (if present)
+  # Format can be:
+  #   - "ENSG00000123456|peak_1" (multi-peak mode)
+  #   - "ENSG00000123456" (single-peak mode)
+  if (grepl("\\|peak_", sequence_id)) {
+    # Multi-peak format
+    parts <- strsplit(sequence_id, "\\|")[[1]]
+    gene_id <- parts[1]
+    peak_id <- parts[2]
+  } else {
+    # Single-peak format
+    gene_id <- sequence_id
+    peak_id <- NA
+  }
+  
+  # Look up strand information
+  # Try sequence_id first (includes peak_id), fall back to gene_id
+  if (sequence_id %in% names(gene_strands)) {
+    strand <- gene_strands[[sequence_id]]
+  } else if (gene_id %in% names(gene_strands)) {
+    strand <- gene_strands[[gene_id]]
+  } else {
+    cat("Warning: Neither sequence_id '", sequence_id, "' nor gene_id '", gene_id, 
+        "' found in peaks data, skipping\n", sep="")
     next
   }
   
-  strand <- gene_strands[[gene_id]]
-  primers <- primer_data[[gene_id]]
+  primers <- primer_data[[sequence_id]]
   
   # Determine which primer type to extract based on strand
   # Since transcriptome FASTA contains mature mRNA sequences in 5' to 3' orientation,
@@ -139,6 +175,7 @@ for (gene_id in names(primer_data)) {
     if (primer_info$type == target_type) {
       cdna_primers <- rbind(cdna_primers, data.frame(
         gene_id = gene_id,
+        peak_id = peak_id,
         primer_index = primer_info$index,
         primer_type = primer_info$type,
         primer_sequence = primer_info$sequence,
@@ -150,13 +187,20 @@ for (gene_id in names(primer_data)) {
   }
 }
 
-# Sort by gene_id and primer_index
-cdna_primers <- cdna_primers[order(cdna_primers$gene_id, cdna_primers$primer_index), ]
+# Sort by gene_id, peak_id, and primer_index
+cdna_primers <- cdna_primers[order(cdna_primers$gene_id, cdna_primers$peak_id, cdna_primers$primer_index), ]
 
 # Write output
 write.table(cdna_primers, opt$out_tsv, sep="\t", quote=FALSE, row.names=FALSE)
 
 cat("Extracted", nrow(cdna_primers), "cDNA-complementary primers for", length(unique(cdna_primers$gene_id)), "genes\n")
+
+# Count peaks if peak_id column has data
+n_peaks <- sum(!is.na(cdna_primers$peak_id))
+if (n_peaks > 0) {
+  cat("  Multi-peak mode:", length(unique(cdna_primers$peak_id[!is.na(cdna_primers$peak_id)])), "unique peaks\n")
+}
+
 cat("Output written to:", opt$out_tsv, "\n")
 
 # Summary by strand

@@ -1,7 +1,7 @@
 process OPTIMIZE_PRIMER_ISOFORMS {
   tag 'optimize_isoforms'
   publishDir params.outdir, mode: 'copy'
-  conda "python=3.10 pandas=2.0"
+  conda "${projectDir}/env/optimize_primer_isoforms_env.yml"
 
   input:
   path best_primers_file

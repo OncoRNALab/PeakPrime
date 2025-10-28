@@ -1,0 +1,8 @@
+name: optimize_primers_multipeak_env
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  # Python environment for multi-peak primer optimization
+  - python=3.10
+  - pandas=2.0.*

@@ -43,20 +43,40 @@ def main():
     # Normalize columns
     if 'primer_id' not in summary.columns:
         # Construct primer_id from components if not present
-        if all(col in summary.columns for col in ['gene_id', 'primer_index', 'primer_type', 'gene_strand']):
-            summary['primer_id'] = (summary['gene_id'].astype(str) + "|idx" + 
-                                  summary['primer_index'].astype(str) + "|" + 
-                                  summary['primer_type'].astype(str) + "|strand" + 
-                                  summary['gene_strand'].astype(str))
+        # Check if peak_id column exists (multi-peak mode)
+        if 'peak_id' in summary.columns and summary['peak_id'].notna().any():
+            # Multi-peak mode: include peak_id
+            if all(col in summary.columns for col in ['gene_id', 'peak_id', 'primer_index', 'primer_type', 'gene_strand']):
+                summary['primer_id'] = (summary['gene_id'].astype(str) + "|" +
+                                      summary['peak_id'].astype(str) + "|idx" + 
+                                      summary['primer_index'].astype(str) + "|" + 
+                                      summary['primer_type'].astype(str) + "|strand" + 
+                                      summary['gene_strand'].astype(str))
+            else:
+                print('detailed summary missing required columns for multi-peak primer_id construction; falling back to report heuristic', file=sys.stderr)
+                out = report[report.get('num_alignments', '0').astype(int) == 1].copy()
+                # Remove alignment_quality from fallback output
+                if 'alignment_quality' in out.columns:
+                    out = out.drop('alignment_quality', axis=1)
+                out.to_csv(args.out, sep='\t', index=False)
+                print(f'Wrote {args.out} (fallback quick filter)')
+                return
         else:
-            print('detailed summary missing required columns for primer_id construction; falling back to report heuristic', file=sys.stderr)
-            out = report[report.get('num_alignments', '0').astype(int) == 1].copy()
-            # Remove alignment_quality from fallback output
-            if 'alignment_quality' in out.columns:
-                out = out.drop('alignment_quality', axis=1)
-            out.to_csv(args.out, sep='\t', index=False)
-            print(f'Wrote {args.out} (fallback quick filter)')
-            return
+            # Single-peak mode: original format
+            if all(col in summary.columns for col in ['gene_id', 'primer_index', 'primer_type', 'gene_strand']):
+                summary['primer_id'] = (summary['gene_id'].astype(str) + "|idx" + 
+                                      summary['primer_index'].astype(str) + "|" + 
+                                      summary['primer_type'].astype(str) + "|strand" + 
+                                      summary['gene_strand'].astype(str))
+            else:
+                print('detailed summary missing required columns for primer_id construction; falling back to report heuristic', file=sys.stderr)
+                out = report[report.get('num_alignments', '0').astype(int) == 1].copy()
+                # Remove alignment_quality from fallback output
+                if 'alignment_quality' in out.columns:
+                    out = out.drop('alignment_quality', axis=1)
+                out.to_csv(args.out, sep='\t', index=False)
+                print(f'Wrote {args.out} (fallback quick filter)')
+                return
 
     # ===== STAGE 1: Filter for perfect matches (zero mismatches) =====
     print("\n=== 3-STAGE FILTERING FOR 3' RNA-SEQ ===")

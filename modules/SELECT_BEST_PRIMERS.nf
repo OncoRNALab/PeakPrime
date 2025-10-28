@@ -1,7 +1,7 @@
 process SELECT_BEST_PRIMERS {
   tag 'select_best_primers'
   publishDir params.outdir, mode: 'copy'
-  conda "python=3.9 pandas=1.5.*"
+  conda "${projectDir}/env/select_best_primers_env.yml"
 
   input:
   path report

@@ -29,6 +29,8 @@ process PROCESS_MACS2_PEAKS {
         --min_peak_score ${params.macs2_min_peak_score ?: 0} \\
         --peak_selection_metric ${params.peak_selection_metric ?: 'score'} \\
         --peak_rank ${params.peak_rank ?: 1} \\
+        ${params.select_all_peaks ? '--select_all_peaks' : ''} \\
+        --max_peaks_per_gene ${params.max_peaks_per_gene ?: 0} \\
         --min_exonic_fraction ${params.min_exonic_fraction ?: 'NA'} \\
         --trim_to_exon ${params.trim_to_exon ? 'true' : 'false'} \\
         --force_exonic_trimming ${params.force_exonic_trimming ? 'true' : 'false'} \\
