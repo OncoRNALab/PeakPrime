@@ -11,6 +11,14 @@ process BAM_INDEX {
 
   script:
   """
+  # Verify samtools is available
+  if ! command -v samtools &> /dev/null; then
+    echo "ERROR: samtools not found in PATH"
+    echo "Conda environment may not be activated properly"
+    echo "PATH: \$PATH"
+    exit 1
+  fi
+  
   samtools index -@ 4 ${bam}
   """
 }

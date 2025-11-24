@@ -9,6 +9,35 @@
 
 PeakPrime is a Nextflow pipeline that uses **MACS2 peak calling** to identify high-coverage regions in (3' end) RNA-seq data and designs strand-specific cDNA primers with comprehensive quality control and visualization.
 
+## 📑 Table of Contents
+
+- [Why PeakPrime?](#-why-peakprime)
+- [Pipeline Overview](#-pipeline-overview)
+- [Requirements](#-requirements)
+- [Installation](#️-installation)
+- [Quick Start](#-quick-start)
+  - [Mode 1: Peak-Based Primer Design](#mode-1-peak-based-primer-design-default)
+  - [Mode 2: Distance-Based Primer Design](#mode-2-distance-based-primer-design)
+  - [Generate Visualization Plots](#generate-visualization-plots)
+- [Parameters](#️-parameters)
+  - [Required Parameters](#required-parameters)
+  - [MACS2 Peak Calling Parameters](#macs2-peak-calling-parameters)
+  - [Primer Design Parameters](#primer-design-parameters)
+  - [Quality Control Parameters](#quality-control-parameters)
+  - [Transcriptome Alignment QC](#transcriptome-alignment-qc-optional)
+  - [Plotting Parameters](#plotting-parameters-for---makeplots-mode)
+- [Output Files](#-output-files)
+- [Visualization Features](#-visualization-features)
+- [Quality Control Features](#-quality-control-features)
+- [Biological Rationale](#-biological-rationale)
+- [Example Configuration Files](#-example-configuration-files)
+- [Troubleshooting](#-troubleshooting)
+- [Profiles](#️-profiles)
+- [UGhent HPC VSC Users](#️-ughent-hpc-vsc-users)
+- [Citation](#-citation)
+- [Contributing](#-contributing)
+- [License](#-license)
+
 ## 🔬 Why PeakPrime?
 
 - **Peak-based target identification**: Uses MACS2 to find statistically significant coverage peaks
@@ -471,6 +500,60 @@ nextflow run main.nf -profile pbs [other options]
 - Uses PBS job scheduler
 - Suitable for HPC environments
 - Configurable resource requirements
+
+## 🖥️ UGhent HPC VSC Users
+
+If you're using the UGhent HPC infrastructure, follow these steps to run PeakPrime:
+
+### 1. Configure Nextflow Work Directory
+
+Add the following to your `nextflow.config` file to automatically use your VSC scratch space:
+
+```groovy
+// Configure work directory for VSC scratch storage
+def scratch_dir = System.getenv("VSC_SCRATCH_PROJECTS_BASE") ? "${System.getenv("VSC_SCRATCH_PROJECTS_BASE")}/$tier1_project" : // Tier 1 scratch
+                  System.getenv("VSC_SCRATCH_VO_USER") ?: // VO scratch
+                  System.getenv("VSC_SCRATCH") // user scratch
+
+// Specify the work directory
+workDir = "$scratch_dir/work"
+```
+
+This configuration prioritizes:
+1. Tier 1 scratch space (if available)
+2. VO scratch space (Virtual Organization scratch)
+3. User scratch space (fallback)
+
+### 2. Submit Your Job
+
+Use the provided PBS job submission script as a template:
+
+```bash
+# Copy and modify the example script
+cp test_jobs/Example_job_submission.sh my_peakprime_job.sh
+
+# Edit the script with your paths and parameters
+nano my_peakprime_job.sh
+
+# Submit the job
+qsub my_peakprime_job.sh
+```
+
+The example script (`test_jobs/Example_job_submission.sh`) includes:
+- PBS resource specifications (nodes, memory, walltime)
+- Conda cache directory configuration
+- Nextflow module loading
+- Complete pipeline command with all necessary parameters
+- Example for standalone plotting mode
+
+**Important**: Make sure to:
+- Create the conda cache directories before first run:
+  ```bash
+  mkdir -p /user/gent/446/vsc44685/ScratchVO_dir/conda_pkgs
+  mkdir -p /user/gent/446/vsc44685/ScratchVO_dir/conda_cache
+  ```
+- Update all file paths in the script to match your data locations
+- Use the `pbs` profile in your nextflow command
 
 ## 📚 Citation
 
