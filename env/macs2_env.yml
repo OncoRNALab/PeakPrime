@@ -8,10 +8,10 @@ dependencies:
   - python=3.9.*
   
   # MACS2 and its dependencies with strict version pins
-  # These versions are known to be compatible with each other
-  - numpy=1.21.6
-  - scipy=1.7.3
-  - macs2=2.2.7.1
+  # Updated to resolve numpy binary compatibility with conda 25.x
+  - numpy=1.23.5
+  - scipy=1.10.1
+  - macs2=2.2.9.1
   
   # Homer for peak annotation (optional but useful)
   - homer
