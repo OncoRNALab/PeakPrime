@@ -48,6 +48,8 @@ PeakPrime is a Nextflow pipeline that uses **MACS2 peak calling** to identify hi
 
 ## 🚀 Pipeline Overview
 
+![Pipeline Workflow](docs/pipeline_detailed_steps.png)
+
 ### Core Workflow
 1. **Peak calling**: MACS2 identifies significant coverage peaks from RNA-seq BAM files
 2. **Peak processing**: Filters peaks by quality metrics and exonic overlap

@@ -5,4 +5,4 @@ channels:
   - defaults
 dependencies:
   - megadepth=1.2.*
-  - samtools=1.19
+  - samtools=1.21

@@ -4,18 +4,11 @@ channels:
   - bioconda
   - defaults
 dependencies:
-  # Pin Python version to ensure ABI compatibility
   - python=3.9.*
-  
-  # MACS2 and its dependencies with strict version pins
-  # Updated to resolve numpy binary compatibility with conda 25.x
-  - numpy=1.23.5
+  - numpy=1.23.2
   - scipy=1.10.1
   - macs2=2.2.9.1
-  
-  # Homer for peak annotation (optional but useful)
   - homer
-  
   # Additional dependencies that MACS2 needs
   # These will be automatically resolved but good to document
   # - cython
