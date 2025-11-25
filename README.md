@@ -33,7 +33,7 @@ PeakPrime is a Nextflow pipeline that uses **MACS2 peak calling** to identify hi
 - [Example Configuration Files](#-example-configuration-files)
 - [Troubleshooting](#-troubleshooting)
 - [Profiles](#️-profiles)
-- [UGhent HPC VSC Users](#️-ughent-hpc-vsc-users)
+- [UGent HPC VSC Users](#️-ugent-hpc-vsc-users)
 - [Citation](#-citation)
 - [Contributing](#-contributing)
 - [License](#-license)
@@ -503,9 +503,9 @@ nextflow run main.nf -profile pbs [other options]
 - Suitable for HPC environments
 - Configurable resource requirements
 
-## 🖥️ UGhent HPC VSC Users
+## 🖥️ UGent HPC VSC Users
 
-If you're using the UGhent HPC infrastructure, follow these steps to run PeakPrime:
+If you're using the UGent HPC infrastructure, follow these steps to run PeakPrime:
 
 ### 1. Configure Nextflow Work Directory
 
