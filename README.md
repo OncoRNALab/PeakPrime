@@ -17,8 +17,8 @@ PeakPrime is a Nextflow pipeline that uses **MACS2 peak calling** to identify hi
 - [Installation](#️-installation)
 - [Quick Start](#-quick-start)
   - [Mode 1: Peak-Based Primer Design](#mode-1-peak-based-primer-design-default)
+    - [Multi-Peak Mode](#multi-peak-mode-advanced)
   - [Mode 2: Distance-Based Primer Design](#mode-2-distance-based-primer-design)
-  - [Multi-Peak Mode](#multi-peak-mode-advanced)
   - [Generate Visualization Plots](#generate-visualization-plots)
 - [Parameters](#️-parameters)
   - [Required Parameters](#required-parameters)
@@ -102,6 +102,24 @@ nextflow run main.nf \
   -profile local
 ```
 
+#### Multi-Peak Mode (Advanced)
+
+PeakPrime can select multiple peaks per gene instead of just the best peak, with optional optimization for selecting the most informative primers across peaks.
+
+```bash
+nextflow run main.nf \
+  --bam sample.bam \
+  --gtf annotations.gtf \
+  --genes gene_list.txt \
+  --select_all_peaks \
+  --optimize_multipeak \
+  --primers_per_gene 3 \
+  --outdir results_multipeak/ \
+  -profile local
+```
+
+**📖 For detailed documentation on multi-peak mode and optimization parameters, see [docs/features/MULTI_PEAK_MODE.md](docs/features/MULTI_PEAK_MODE.md)**
+
 ### Mode 2: Distance-Based Primer Design
 
 Design primers at a fixed distance from the 3' end of transcripts (no BAM file required).
@@ -127,24 +145,6 @@ nextflow run main.nf \
 ```
 
 **📖 For detailed documentation on distance-based mode, see [docs/DISTANCE_BASED_PRIMER_DESIGN.md](docs/DISTANCE_BASED_PRIMER_DESIGN.md)**
-
-### Multi-Peak Mode (Advanced)
-
-PeakPrime can select multiple peaks per gene instead of just the best peak, with optional optimization for selecting the most informative primers across peaks.
-
-```bash
-nextflow run main.nf \
-  --bam sample.bam \
-  --gtf annotations.gtf \
-  --genes gene_list.txt \
-  --select_all_peaks \
-  --optimize_multipeak \
-  --primers_per_gene 3 \
-  --outdir results_multipeak/ \
-  -profile local
-```
-
-**📖 For detailed documentation on multi-peak mode and optimization parameters, see [docs/features/MULTI_PEAK_MODE.md](docs/features/MULTI_PEAK_MODE.md)**
 
 ### With Custom MACS2 Parameters (Peak-Based Mode)
 ```bash
