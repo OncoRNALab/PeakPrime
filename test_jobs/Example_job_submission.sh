@@ -9,7 +9,7 @@ export CONDA_PKGS_DIRS=/user/gent/446/vsc44685/ScratchVO_dir/conda_pkgs
 export NXF_CONDA_CACHEDIR=/user/gent/446/vsc44685/ScratchVO_dir/conda_cache
 
 # go to the pipeline directory
-cd path/to/peak/Primer_PeakFindR
+cd path/to/PeakPrime
 #load nextflow module
 ml Nextflow/25.04.4
 
