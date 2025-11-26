@@ -178,7 +178,6 @@ workflow primer_design {
 
   emit:
     macs2_narrowpeak = MACS2_CALLPEAK.out.narrowpeak
-    macs2_annotation = MACS2_CALLPEAK.out.annotation
     processed_peaks = PROCESS_MACS2_PEAKS.out.tsv
     bw
     primer_targets_fa

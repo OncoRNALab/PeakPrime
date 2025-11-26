@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Optimize primer selection to maximize distinct isoform coverage.
+"""Optimize primer selection to maximize distinct isoform coverage.
 
 Reads best_primers.tsv and primer_alignment_summary.tsv, then selects
 one optimal primer per gene to maximize the total number of unique
@@ -11,6 +11,9 @@ Strategy:
 1. Within each gene: Select primer targeting most isoforms
 2. Across genes: Resolve conflicts where multiple primers target same isoform
 3. Output: One primer per gene with maximal unique isoform coverage
+
+Note: Uses same max_mismatches threshold as select_best_primer.py to ensure
+      consistent primer specificity filtering.
 """
 
 import argparse
@@ -21,8 +24,14 @@ from collections import defaultdict
 
 
 def load_data(best_primers_file: str, alignment_summary_file: str, 
-              distance_threshold: float = 1000.0) -> Tuple[pd.DataFrame, pd.DataFrame]:
-    """Load and validate input files."""
+              distance_threshold: float = 1000.0,
+              max_mismatches: int = 0) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """Load and validate input files.
+    
+    Args:
+        max_mismatches: Maximum mismatches for primer specificity (0-3).
+                       Must match value used in select_best_primer.py.
+    """
     print(f"\n{'='*60}")
     print("LOADING INPUT DATA")
     print(f"{'='*60}")
@@ -81,11 +90,11 @@ def load_data(best_primers_file: str, alignment_summary_file: str,
             alignment_summary['distance_to_end'], errors='coerce'
         ).fillna(float('inf'))
     
-    # Filter: perfect matches only
+    # Filter: within mismatch threshold
     initial_count = len(alignment_summary)
-    alignment_summary = alignment_summary[alignment_summary['mismatches'] == 0]
+    alignment_summary = alignment_summary[alignment_summary['mismatches'] <= max_mismatches]
     print(f"  Applied quality filters:")
-    print(f"    • Perfect matches (mismatches=0): {len(alignment_summary)}/{initial_count}")
+    print(f"    • Alignments (mismatches≤{max_mismatches}): {len(alignment_summary)}/{initial_count}")
     
     # Filter: within distance threshold (if distance data available)
     if 'distance_to_end' in alignment_summary.columns:
@@ -135,7 +144,7 @@ def build_primer_isoform_mapping(best_primers: pd.DataFrame,
         
         # Add transcript to this primer's set
         # Note: We already filtered to gene_id matches in alignment_summary
-        # and applied quality filters (mismatches=0, distance threshold)
+        # and applied quality filters (mismatches≤threshold, distance threshold)
         primer_isoforms[composite_key].add(transcript_id)
     
     # Convert to regular dict
@@ -455,6 +464,8 @@ def main():
                        help='Output file: optimized primer selection (default: best_primers_optimal.tsv)')
     parser.add_argument('--distance_threshold', type=float, default=1000.0,
                        help='Maximum distance from 3\' end for isoform consideration (bp). Default: 1000')
+    parser.add_argument('--max_mismatches', type=int, default=0,
+                       help='Maximum mismatches for primer specificity (0-3). Must match select_best_primer.py. Default: 0')
     
     args = parser.parse_args()
     
@@ -462,7 +473,8 @@ def main():
     best_primers, alignment_summary = load_data(
         args.best_primers, 
         args.alignment_summary,
-        args.distance_threshold
+        args.distance_threshold,
+        args.max_mismatches
     )
     
     # Build primer-isoform mapping

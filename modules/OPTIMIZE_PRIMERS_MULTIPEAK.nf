@@ -14,6 +14,7 @@ process OPTIMIZE_PRIMERS_MULTIPEAK {
     
     script:
     def alignment_arg = alignment_summary.name != 'NO_FILE' ? "--alignment_summary ${alignment_summary}" : ""
+    def mismatch_arg = params.max_mismatches ? "--max_mismatches ${params.max_mismatches}" : ""
     """
     python ${projectDir}/bin/optimize_primers_multipeak.py \\
         --best_primers ${best_primers} \\
@@ -23,6 +24,7 @@ process OPTIMIZE_PRIMERS_MULTIPEAK {
         --distance_weight ${params.distance_weight} \\
         --isoform_weight ${params.isoform_weight} \\
         --peak_rank_weight ${params.peak_rank_weight} \\
+        ${mismatch_arg} \\
         2>&1 | tee optimization_stats.txt
     
     # Add summary info

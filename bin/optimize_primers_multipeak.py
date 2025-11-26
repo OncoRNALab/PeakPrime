@@ -14,11 +14,15 @@ Strategy:
 - Select top N primers per gene (default: 3)
 - Resolve isoform conflicts across genes (similar to optimize_primer_isoforms.py)
 
+Note: Uses same max_mismatches threshold as select_best_primer.py to ensure
+      consistent primer specificity filtering.
+
 Usage:
     python bin/optimize_primers_multipeak.py \\
         --best_primers best_primers.tsv \\
         --alignment_summary primer_alignment_summary.tsv \\
         --primers_per_gene 3 \\
+        --max_mismatches 0 \\
         --distance_weight 0.5 \\
         --isoform_weight 0.3 \\
         --peak_rank_weight 0.2 \\
@@ -148,12 +152,13 @@ class MultiPeakPrimerOptimizer:
         
         return composite
     
-    def load_isoform_mapping(self, alignment_summary_path):
+    def load_isoform_mapping(self, alignment_summary_path, max_mismatches=0):
         """
         Load primer-to-isoform mapping from alignment summary.
         
         Args:
             alignment_summary_path: Path to primer_alignment_summary.tsv
+            max_mismatches: Maximum mismatches for primer specificity (0-3)
         
         Returns:
             dict: {primer_id: set of transcript IDs}
@@ -175,15 +180,15 @@ class MultiPeakPrimerOptimizer:
             transcript_col = 'aligned_transcript_id'
         
         if 'primer_id' in summary.columns and transcript_col:
-            # Filter for perfect matches (mismatches == 0)
+            # Filter for alignments within mismatch threshold
             if 'mismatches' in summary.columns:
-                perfect = summary[summary['mismatches'] == 0]
-                print(f"Found {len(perfect)} perfect alignment records (0 mismatches)", file=sys.stderr)
+                filtered = summary[summary['mismatches'] <= max_mismatches]
+                print(f"Found {len(filtered)} alignment records (mismatches≤{max_mismatches})", file=sys.stderr)
             else:
-                perfect = summary
+                filtered = summary
                 print("No 'mismatches' column found, using all alignments", file=sys.stderr)
             
-            for _, row in perfect.iterrows():
+            for _, row in filtered.iterrows():
                 primer_id = row['primer_id']
                 transcript_id = row.get(transcript_col, None)
                 if transcript_id and pd.notna(transcript_id):
@@ -513,6 +518,8 @@ def main():
                         help='Weight for isoform coverage (default: 0.3)')
     parser.add_argument('--peak_rank_weight', type=float, default=0.2,
                         help='Weight for peak rank (default: 0.2)')
+    parser.add_argument('--max_mismatches', type=int, default=0,
+                        help='Maximum mismatches for primer specificity (0-3). Must match select_best_primer.py. Default: 0')
     
     args = parser.parse_args()
     
@@ -531,7 +538,7 @@ def main():
             isoform_weight=args.isoform_weight,
             peak_rank_weight=args.peak_rank_weight
         )
-        primer_isoforms = optimizer.load_isoform_mapping(args.alignment_summary)
+        primer_isoforms = optimizer.load_isoform_mapping(args.alignment_summary, args.max_mismatches)
         print(f"Loaded isoform mappings for {len(primer_isoforms)} primers")
     else:
         print("No alignment_summary provided, isoform scoring will be 0")

@@ -3,8 +3,11 @@
 # Extract cDNA-complementary primers from Primer3 output
 # This script selects primers that will match the mature mRNA sequence
 # (and thus be complementary to cDNA synthesized from that mRNA)
-# For negative-strand genes: extract LEFT primers (match antisense mRNA directly)
-# For positive-strand genes: extract RIGHT primers (match sense mRNA directly)
+# 
+# ALWAYS extracts LEFT primers for ALL genes (both + and - strand)
+# This is correct because the genomic template sequence is already strand-corrected
+# in the previous step (process_macs2_peaks.R uses getSeq with strand-aware extraction)
+# so the template always matches the mRNA orientation (5' to 3')
 
 suppressPackageStartupMessages({
   library(optparse)
@@ -208,4 +211,4 @@ neg_count <- sum(cdna_primers$gene_strand == "-")
 pos_count <- sum(cdna_primers$gene_strand == "+")
 cat("Summary:\n")
 cat("  Negative-strand genes (LEFT primers):", neg_count, "\n")
-cat("  Positive-strand genes (RIGHT primers):", pos_count, "\n")
+cat("  Positive-strand genes (LEFT primers):", pos_count, "\n")

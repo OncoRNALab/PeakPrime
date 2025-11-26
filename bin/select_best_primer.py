@@ -3,12 +3,12 @@
 Select best primers from alignment reports.
 
 3-stage filtering strategy for 3' RNA-seq protocols:
-1. Require mismatches == 0 (perfect alignment quality)
+1. Filter by mismatch threshold (≤N mismatches, configurable)
 2. Require distance_to_end <= threshold (protocol-specific relevance)
 3. Require unique gene mapping (specificity, only for relevant hits)
 
-This allows primers with off-target hits to other genes as long as 
-those hits are far from the 3' end (where amplification occurs).
+This correctly identifies primers that may cross-react with off-targets
+even when the off-target has 1-3 mismatches (which can still amplify).
 
 Writes out 'best_primers.tsv' in the current working directory.
 """
@@ -25,6 +25,10 @@ def main():
     p.add_argument('--distance_threshold', type=float, default=1000.0,
                    help='Maximum distance from 3\' end for alignments to be considered relevant (bp). '
                         'Default: 1000. Use larger values (e.g., 2000-5000) for more permissive filtering.')
+    p.add_argument('--max_mismatches', type=int, default=0,
+                   help='Maximum mismatches allowed for primer specificity (0-3). '
+                        'Default: 0 (perfect matches only). Use 2-3 to detect primers '
+                        'that may cross-react with off-targets.')
     args = p.parse_args()
 
     report = pd.read_csv(args.report, sep='\t', dtype=str)
@@ -78,24 +82,24 @@ def main():
                 print(f'Wrote {args.out} (fallback quick filter)')
                 return
 
-    # ===== STAGE 1: Filter for perfect matches (zero mismatches) =====
+    # ===== STAGE 1: Filter by mismatch threshold =====
     print("\n=== 3-STAGE FILTERING FOR 3' RNA-SEQ ===")
     print(f"Total alignments in summary: {len(summary)}")
     
     summary['mismatches'] = pd.to_numeric(summary.get('mismatches', 9999), errors='coerce').fillna(9999).astype(int)
-    stage1_filtered = summary[summary['mismatches'] == 0].copy()
+    stage1_filtered = summary[summary['mismatches'] <= args.max_mismatches].copy()
     
-    print(f"STAGE 1 (mismatches=0): {len(stage1_filtered)} alignments retained ({len(stage1_filtered)/max(len(summary),1)*100:.1f}%)")
+    print(f"STAGE 1 (mismatches≤{args.max_mismatches}): {len(stage1_filtered)} alignments retained ({len(stage1_filtered)/max(len(summary),1)*100:.1f}%)")
     
     if stage1_filtered.empty:
-        print("No perfect-match alignments found. Creating empty output.")
-        cols = list(report.columns) + ['aligned_gene_name', 'zero_mismatch_alignments', 'distance_to_end_min']
+        print(f"No alignments with ≤{args.max_mismatches} mismatches found. Creating empty output.")
+        cols = list(report.columns) + ['aligned_gene_name', 'alignments_within_threshold', 'distance_to_end_min']
         if 'alignment_quality' in cols:
             cols.remove('alignment_quality')
         if 'best_mapq' in cols:
             cols.remove('best_mapq')
         pd.DataFrame(columns=cols).to_csv(args.out, sep='\t', index=False)
-        print(f'Wrote {args.out} (no perfect matches)')
+        print(f'Wrote {args.out} (no alignments within mismatch threshold)')
         return
     
     # ===== STAGE 2: Filter by distance to 3' end =====
@@ -112,7 +116,7 @@ def main():
     
     if stage2_filtered.empty:
         print(f"No alignments within {args.distance_threshold}bp of 3' end. Creating empty output.")
-        cols = list(report.columns) + ['aligned_gene_name', 'zero_mismatch_alignments', 'distance_to_end_min']
+        cols = list(report.columns) + ['aligned_gene_name', 'alignments_within_threshold', 'distance_to_end_min']
         if 'alignment_quality' in cols:
             cols.remove('alignment_quality')
         if 'best_mapq' in cols:
@@ -139,7 +143,7 @@ def main():
                 if 'best_mapq' in row:
                     del row['best_mapq']  # Remove meaningless MAPQ
                 row['aligned_gene_name'] = genes[0]
-                row['zero_mismatch_alignments'] = len(group)
+                row['alignments_within_threshold'] = len(group)
                 # Add minimum distance to 3' end for this primer
                 row['distance_to_end_min'] = int(group['distance_to_end_numeric'].min())
                 selected.append(row)
@@ -161,7 +165,7 @@ def main():
 
     if not selected:
         # write empty with headers to be predictable
-        cols = list(report.columns) + ['aligned_gene_name', 'zero_mismatch_alignments', 'distance_to_end_min']
+        cols = list(report.columns) + ['aligned_gene_name', 'alignments_within_threshold', 'distance_to_end_min']
         if 'alignment_quality' in cols:
             cols.remove('alignment_quality')
         if 'best_mapq' in cols:
@@ -174,7 +178,7 @@ def main():
     outdf.to_csv(args.out, sep='\t', index=False)
     print(f'Wrote {args.out} with {len(outdf)} primers')
     print(f'  Column "distance_to_end_min" shows closest distance to 3\' end (bp)')
-    print(f'  Column "zero_mismatch_alignments" shows number of perfect alignments near 3\' end')
+    print(f'  Column "alignments_within_threshold" shows number of alignments (≤{args.max_mismatches} mismatches) near 3\' end')
 
 
 if __name__ == '__main__':

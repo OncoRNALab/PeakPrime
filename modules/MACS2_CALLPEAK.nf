@@ -3,16 +3,13 @@ process MACS2_CALLPEAK {
     publishDir "${params.outdir}/macs2_peaks", mode: 'copy'
     
     // Use environment file for better reproducibility across different conda versions
-    // Alternative: uncomment the line below to use inline conda specification
     conda "${projectDir}/env/macs2_env.yml"
-    // conda 'python=3.9.* bioconda::macs2=2.2.7.1 bioconda::homer conda-forge::numpy=1.21.6 conda-forge::scipy=1.7.3'
     
     input:
     tuple val(sample_id), path(bam_file)
     
     output:
     tuple val(sample_id), path("${sample_id}_peaks.narrowPeak"), emit: narrowpeak
-    tuple val(sample_id), path("${sample_id}_peaks_annotation.txt"), emit: annotation
     path("${sample_id}_*"), emit: all_outputs
     
     script:
@@ -42,15 +39,6 @@ process MACS2_CALLPEAK {
     if [ ! -f "${sample_id}_peaks.narrowPeak" ]; then
         echo "Error: MACS2 did not produce expected narrowPeak file"
         exit 1
-    fi
-    
-    # Second command: Try to annotate peaks with Homer (optional, create dummy file if fails)
-    if annotatePeaks.pl ${sample_id}_peaks.narrowPeak hg38 -genomeOntology . > ${sample_id}_peaks_annotation.txt 2>/dev/null; then
-        echo "Peak annotation completed successfully"
-    else
-        echo "Homer annotation failed (genome not available), creating dummy annotation file"
-        echo -e "PeakID\\tChr\\tStart\\tEnd\\tStrand\\tAnnotation\\tDetailed Annotation\\tDistance to TSS\\tNearest PromoterID\\tEntrez ID\\tNearest Unigene\\tNearest Refseq\\tNearest Ensembl\\tGene Name\\tGene Alias\\tGene Description\\tGene Type" > ${sample_id}_peaks_annotation.txt
-        echo "Annotation skipped due to missing Homer genome data" >> ${sample_id}_peaks_annotation.txt
     fi
     """
 }

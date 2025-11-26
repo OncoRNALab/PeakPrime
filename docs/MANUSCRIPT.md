@@ -293,11 +293,6 @@ PRIMER_MAX_TM=63.0
 - **Content**: Detailed peak information with fold enrichment and FDR
 - **Purpose**: Comprehensive peak statistics
 
-#### 4.1.2 Peak Annotation (`*_peaks_annotation.txt`)
-- **Format**: Tab-delimited text
-- **Content**: Genomic annotation of peaks using Homer
-- **Columns**: Peak ID, genomic location, annotation, distance to TSS, gene information
-
 ### 4.2 Processed Peak Results (`processed_peaks/`)
 
 #### 4.2.1 Selected Peaks (`selected_peaks.tsv`)

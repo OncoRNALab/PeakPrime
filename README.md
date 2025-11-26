@@ -94,10 +94,20 @@ PeakPrime now supports two primer design modes:
 
 #### Basic Usage
 ```bash
+# Basic run (strict specificity - default)
 nextflow run main.nf \
   --bam sample.bam \
   --gtf annotations.gtf \
   --genes gene_list.txt \
+  --outdir results/ \
+  -profile local
+
+# Recommended: realistic specificity detection
+nextflow run main.nf \
+  --bam sample.bam \
+  --gtf annotations.gtf \
+  --genes gene_list.txt \
+  --max_mismatches 2 \
   --outdir results/ \
   -profile local
 ```
@@ -277,6 +287,31 @@ macs2 callpeak -t file.bam -g hs --bdg --keep-dup auto -q 0.05 --nomodel --extsi
 | `--transcriptome_index` | Bowtie2 transcriptome index prefix |
 | `--transcriptome_fasta` | Transcriptome FASTA for gene mapping |
 | `--max_primers_per_gene` | Maximum primers per gene for QC (default: 20) |
+| `--distance_threshold` | Maximum distance from 3' end for alignments (bp, default: 400) |
+| `--max_mismatches` | Maximum mismatches for primer specificity check (0-3, default: 0) |
+| `--bowtie2_seed_length` | Bowtie2 seed length for alignment (bp, default: 10) |
+
+#### Understanding Primer Specificity Filtering
+
+The `--max_mismatches` parameter controls how strictly primers are evaluated for off-target amplification:
+
+- **`--max_mismatches 0` (default, strict)**: Only considers perfect matches (0 mismatches) when checking primer specificity. This ensures primers will only amplify their intended target gene. However, this may be overly conservative - primers with 2-3 mismatches to off-target genes can still amplify those targets in PCR, but won't be detected as problematic.
+
+- **`--max_mismatches 2-3` (recommended)**: Detects primers that have near-perfect matches (≤2-3 mismatches) to off-target genes. This provides more realistic specificity assessment, as primers with just a few mismatches can still cross-react and amplify unintended targets. **Recommended for production use** to avoid false negatives.
+
+**How it works**: The pipeline aligns primers to the transcriptome using Bowtie2 and applies a 3-stage filter:
+1. **Stage 1** (Mismatch filter): Keep only alignments with ≤`max_mismatches` mismatches
+2. **Stage 2** (Distance filter): Among those, keep alignments within `distance_threshold` bp of 3' end
+3. **Stage 3** (Specificity filter): Flag primers that align to multiple genes (non-specific)
+
+**Example**:
+```bash
+# Strict filtering (may miss cross-reactive primers)
+nextflow run main.nf --max_mismatches 0 --distance_threshold 400 ...
+
+# Recommended (realistic specificity detection)
+nextflow run main.nf --max_mismatches 2 --distance_threshold 400 ...
+```
 
 ### Plotting Parameters (for --makeplots mode)
 | Parameter | Description |

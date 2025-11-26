@@ -83,7 +83,7 @@ Edit `modules/MACS2_CALLPEAK.nf`:
 // conda "${projectDir}/env/macs2_env.yml"
 
 # Uncomment the inline specification:
-conda 'python=3.9.* bioconda::macs2=2.2.7.1 bioconda::homer conda-forge::numpy=1.21.6 conda-forge::scipy=1.7.3'
+conda 'python=3.9.* bioconda::macs2=2.2.7.1 conda-forge::numpy=1.21.6 conda-forge::scipy=1.7.3'
 ```
 
 ---
@@ -145,7 +145,6 @@ dependencies:
   - python>=3.9
   - numpy>=1.23
   - macs2>=3.0.0
-  - homer
 ```
 
 **Note**: Test thoroughly as MACS2 3.x may have different default parameters or behavior.

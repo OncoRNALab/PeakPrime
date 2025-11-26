@@ -16,6 +16,7 @@ process SELECT_BEST_PRIMERS {
     --report ${report} \
     --summary ${summary} \
     --distance_threshold ${params.distance_threshold} \
+    --max_mismatches ${params.max_mismatches} \
     --out best_primers.tsv
   """
 }

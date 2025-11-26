@@ -18,7 +18,11 @@ process ALIGN_PRIMERS_TRANSCRIPTOME {
   script:
   """
   # Align primers to transcriptome - report all alignments
-  bowtie2 -f -x ${transcriptome_index_prefix} -U ${primers_fasta} -S primers_alignment.sam -a 2> alignment_stats.txt
+  # Optimized for ~20nt primers to detect 1-3 mismatches:
+  # -L: Seed length (default 10bp = 50% of primer length, allows mismatches in other half)
+  # -N 1: Allow 1 mismatch within the seed region
+  # -a: Report all valid alignments (not just best)
+  bowtie2 -f -x ${transcriptome_index_prefix} -U ${primers_fasta} -S primers_alignment.sam -a -L ${params.bowtie2_seed_length} -N 1 2> alignment_stats.txt
   
   # Convert to BAM and sort
   samtools view -bS primers_alignment.sam | samtools sort -o primers_alignment.bam
