@@ -40,3 +40,6 @@ PRIMER_THERMODYNAMIC_TEMPLATE_ALIGNMENT=0
 # Output settings
 PRIMER_NUM_RETURN=20
 PRIMER_EXPLAIN_FLAG=1
+
+#set a very large range to avoid lelngth constaints
+PRIMER_PRODUCT_SIZE_RANGE=40-1000
