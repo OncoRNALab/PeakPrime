@@ -44,22 +44,22 @@ Populate each directory with the finalized assets before publication submission.
    - Follow the installation instructions from the repository’s `main` branch (environment setup, dependencies, and optional container caches).
    - Validate the installation by running the bundled smoke test or `nextflow run main.nf --help`.
 
-4. **Generate Alignment BAMs**
+4. **Generate Alignment BAMs for coverage-based primer design**
    - Process the FASTQs with any QuantSeq-style pipeline to obtain strand-specific, coordinate-sorted BAM files.
    - Accepted options include commercial solutions such as the Lexogen QuantSeqPool pipeline or the open-source implementation maintained by OncoRNALab (`https://github.com/OncoRNALab/QSP_nextflow.git`).
    - Store the resulting BAM files under `data/bam/` and note the exact pipeline version used.
+   - In the manuscript we used the sample RNA033258 coverage to design primers.
 
 5. **Input Preparation**
-   - Place the prepared BAM files, MACS2 peak files, and gene lists in the `data/` directory (paths to be added).
-   - Confirm that `params.config` reflects the manuscript settings (seed length, mismatch thresholds, peak scoring metric, etc.).
+   - Place the prepared BAM file, references files (genome fasta and gtf, and bowite index) and gene lists in the `data/` directory.
 
 6. **Workflow Execution**
     - Launch the main pipeline to reproduce the manuscript primer sets (ensure the file paths below exist exactly as shown or update them accordingly):
        ```bash
        nextflow run main.nf \
-          --bam ./data/RNA033258_S1_L001_dedup_10M.bam \
+          --bam ./data/RNA033258_S1.bam \
           --fasta ./data/GRCh38/Homo_sapiens.GRCh38.dna.primary_assembly.fa \
-          --gtf ./data/Homo_sapiens.GRCh38.109.chrIS_spikes_45S.gtf \
+          --gtf ./data/Homo_sapiens.GRCh38.109.gtf \
           --genes data/genes_list.txt \
           --macs2_qvalue_threshold 0.1 \
           --select_all_peaks --optimize_multipeak \
