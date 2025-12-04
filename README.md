@@ -1,4 +1,4 @@
-# PeakPrime Manuscript Companion instruction
+# PeakPrime Manuscript Companion instructions
 
 > **Publication:** _[Title Placeholder]_  \
 > **Citation:** _[Citation Placeholder]_  \
@@ -12,9 +12,7 @@ This branch provides the reference data, and intermediate outputs used to reprod
 
 - `data/` – Reference annotations, transcriptome indices, and any fixed resources required to run the workflow.
 - `results/` – Workflow outputs generated for the manuscript (per-gene primers, QC tables, and figures).
-- `docs/` – Manuscript-specific notes, figure descriptions, and supplemental material.
-- `env/` – Conda environment definitions for each workflow module.
-- `workflows/` – Nextflow pipeline definitions invoked for the manuscript runs.
+- `scripts/` - Rscripts to reproduce the manuscript figures
 
 Populate each directory with the finalized assets before publication submission.
 
