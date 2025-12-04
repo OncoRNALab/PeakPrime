@@ -1,4 +1,4 @@
-# PeakPrime Manuscript Companion README
+# PeakPrime Manuscript Companion instruction
 
 > **Publication:** _[Title Placeholder]_  \
 > **Citation:** _[Citation Placeholder]_  \
