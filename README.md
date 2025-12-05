@@ -20,8 +20,6 @@ PeakPrime/
 └── scripts/         R Markdown notebooks for figures: 01 (Figure 2 barplots), 02 (Figure 3 rlog correlations), 03 (Figure 4 fold-changes), plus utils.R helpers.
 ```
 
-Populate each directory with the finalized assets before publication submission.
-
 ## Reproducing the Analysis
 
 1. **Data Retrieval**
