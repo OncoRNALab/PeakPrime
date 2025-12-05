@@ -10,9 +10,15 @@ This branch provides the reference data, and intermediate outputs used to reprod
 
 ## Repository Layout
 
-- `data/` – Primer panel spreadsheets (`C3pool_primers.csv`, `C4pool_primers.csv`), random-primed gene counts for IMR32 and UHRR, targeted-sample count matrices, and the `Target_ann.csv` annotation used throughout the manuscript.
-- `scripts/` – R Markdown notebooks to recreate the figures (`01_enrichment.Rmd` for Figure 2 barplots, `02_RlogCorr.Rmd` for Figure 3 rlog correlations, `03_LogFCCorr.Rmd` for Figure 4 fold-changes) plus shared helpers in `utils.R`.
-- `results/` – Output directory for regenerated figures, tables, and QC artifacts produced by the scripts.
+```
+PeakPrime/
+├── data/            Primer panels (C3 and C4), IMR32/UHRR random-primed counts, targeted counts, target annotations.
+├── results/
+│   ├── performance_tests/   Nextflow wall-time and memory usage reports for 50-, 100-, and 200-gene primer design runs.
+│   ├── figures/             Manuscript-ready plots reproduced from the scripts directory.
+│   └── selected_primers/    Selected primer panels.
+└── scripts/         R Markdown notebooks for figures: 01 (Figure 2 barplots), 02 (Figure 3 rlog correlations), 03 (Figure 4 fold-changes), plus utils.R helpers.
+```
 
 Populate each directory with the finalized assets before publication submission.
 
