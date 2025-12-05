@@ -25,8 +25,9 @@ Populate each directory with the finalized assets before publication submission.
 ## Reproducing the Analysis
 
 1. **Data Retrieval**
-   - Download the raw FASTQ archives from Zenodo (**"PeakPrime manuscript data"**, DOI placeholder) and verify checksums.
+   - Download the raw FASTQ archives from Zenodo (**"PeakPrime manuscript data"**, DOI: [10.5281/zenodo.17821004](https://doi.org/10.5281/zenodo.17821004))
    - Unpack the FASTQ files into `data/raw_fastq/` (or another documented location).
+
 
 2. **Reference Resources**
    - Retrieve the GRCh38 primary genome assembly and matching GTF annotation:
@@ -54,7 +55,7 @@ Populate each directory with the finalized assets before publication submission.
    - Process the FASTQs with any QuantSeq-style pipeline to obtain strand-specific, coordinate-sorted BAM files.
    - Accepted options include commercial solutions such as the Lexogen QuantSeqPool pipeline or the open-source implementation maintained by OncoRNALab (`https://github.com/OncoRNALab/QSP_nextflow.git`).
    - Store the resulting BAM files under `data/bam/` and note the exact pipeline version used.
-   - In the manuscript we used the sample RNA033258 coverage to design primers.
+   - The primary primer-design analyses in this branch used the RNA033258 sample for alignment and peak calling.
 
 5. **Input Preparation**
    - Place the prepared BAM file, references files (genome fasta and gtf, and bowite index) and gene lists in the `data/` directory.
@@ -78,19 +79,9 @@ Populate each directory with the finalized assets before publication submission.
     - Record the Nextflow log and execution report for reproducibility.
 
 7. **Post-processing**
-   - Collect summary tables and figures from `results/`.
-   - Run any auxiliary scripts listed in `docs/` to regenerate manuscript panels.
 
-## Data Availability Checklist
+   - Run the R scripts in ./scripts/ to reproduce the figures in the manuscript
 
-- [ ] Upload processed primer tables (`best_primers.tsv`, `optimized_primers*.tsv`).
-- [ ] Upload QC reports (HTML, PDF, or TSV summaries).
-- [ ] Document raw data accession identifiers (GEO/SRA/ENA placeholders).
-- [ ] Provide checksums (MD5/SHA256) for all large artifacts.
-
-Raw FASTQ files are archived on Zenodo as **"PeakPrime manuscript data"** (DOI placeholder). Replace the DOI once the deposition is finalized.
-
-The primary primer-design analyses in this branch used the RNA033258 sample for alignment and peak calling.
 
 ### Sample Overview
 
