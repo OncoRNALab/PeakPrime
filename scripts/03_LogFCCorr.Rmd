@@ -1,0 +1,424 @@
+---
+title: "LogFC Correlation Analysis"
+author: "Franco"
+date: "2025-11-10"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+require(dplyr)
+require(ggplot2)
+require(tidyr)
+require(reshape2)
+require(tibble)
+require(Hmisc)
+require(plotly)
+require(readr)
+require(biomaRt)
+require(ggpubr)
+require(stringr)
+require(DESeq2)
+# install.packages("conflicted")
+library(conflicted)
+source("utils.R")
+conflict_prefer("summarise", "dplyr")
+conflicts_prefer(dplyr::summarize)
+conflict_prefer("filter", "dplyr")
+conflict_prefer("select", "dplyr")
+
+color_panel <- c("steelblue", "#e35d6a","darkgray")
+
+```
+
+
+
+# Loading targeted annotation
+```{r}
+#loading and making annotation
+ann <- read_csv("Data/Target_ann.csv")
+#annotation
+ann_targeted_filt <-ann %>% dplyr::filter(RNA_source%in%c("UHRR","IMR32")) %>% dplyr::select(c("SampleID", "Condition", "Concentration", "RNA_source", "Class", ))
+#Loading target gene ids
+C3_new<- read_csv("Data/results/C3pool_primers.csv")
+C4_new<- read_csv("Data/results/C4pool_primers.csv")
+```
+
+# Whole Transcriptome
+
+```{r}
+#loading raw UHRR counts
+UHRR_counts <- read_delim("Data/UHRR_counts.txt")
+#loading raw IMR32 counts
+IMR32_RP <- read_delim("Data/merged_gene_counts_RP_IMR32_raw.txt")
+colnames(IMR32_RP)[1]<-"ensembl_gene_id"
+sample_names<-colnames(IMR32_RP)[2:ncol(IMR32_RP)]
+sample_names<-str_extract(sample_names, "RNA\\d+")
+colnames(IMR32_RP)[2:ncol(IMR32_RP)]<-sample_names
+
+```
+
+## Random DESEQ logFC analysis
+
+```{r}
+#joinning both count matrix
+merged_counts <- full_join(UHRR_counts, IMR32_RP, by = "ensembl_gene_id")
+merged_counts <- merged_counts %>% column_to_rownames(var="ensembl_gene_id")
+#making coldata
+
+#making whole transcriptome annotation
+sample_names <- colnames(merged_counts)
+
+colData_df <- data.frame(
+  SampleID = base::as.factor(sample_names),
+  RNA_source = base::as.factor(c(rep("UHRR", 2), rep("IMR32", 2))),
+  Condition = base::as.factor(c(rep("UHRR", 2), rep("IMR32", 2)))
+)
+
+
+# cutoff_raw = 15
+# smallestGroupSize <- 4
+# keep <- rowSums(merged_counts >= cutoff_raw) >= smallestGroupSize
+# merged_counts_filt <- merged_counts[keep,]
+
+result <- filter_genes_by_replicates(merged_counts, colData_df, count_cutoff = 10)
+merged_counts_filt <- result$filtered_matrix
+
+
+
+
+dds_rp <- DESeqDataSetFromMatrix(countData = merged_counts_filt,
+                              colData = colData_df,
+                              design = ~ RNA_source)
+
+dds_rp <- DESeq(dds_rp)
+
+#Contrast of interest
+
+#res_shrunk_RP <- results(dds_rp, contrast = c("RNA_source", "IMR32", "UHRR"), alpha = 0.05)
+
+res_shrunk_RP <- lfcShrink(dds_rp, coef="RNA_source_UHRR_vs_IMR32", type="apeglm")
+
+
+resOrdered_RP_shrunk <- as.data.frame(res_shrunk_RP) %>%
+  rownames_to_column(var = "ensembl_geneID") %>%
+  dplyr::arrange(desc(abs(log2FoldChange))) 
+
+```
+
+
+## Pool C3
+
+```{r}
+FC_counts <- read_delim("Data/Target_counts_UHRR_IMR32.txt") %>% column_to_rownames(var="ensembl_gene_id")
+samples_to_retain <- ann_targeted_filt$SampleID[ann_targeted_filt$Condition%in% c("UHRR_C3_1nM", "IMR32_C3_1nM")]
+
+FC_counts_filt<- FC_counts %>% select(c(samples_to_retain))
+class_coldata <- ann_targeted_filt[ann_targeted_filt$SampleID %in% samples_to_retain,]
+class_coldata$Concentration <- base::as.factor(class_coldata$Concentration)
+class_coldata$RNA_source <- base::as.factor(class_coldata$RNA_source)
+result <- filter_genes_by_replicates(FC_counts_filt, class_coldata, count_cutoff = 10)
+class3_counts <- result$filtered_matrix
+#model overall UHRRvsIMR32 effect
+dds_C3_all <- DESeqDataSetFromMatrix(countData = class3_counts,
+                              colData = class_coldata,
+                              design = ~ RNA_source)
+
+dds_C3_all <- DESeq(dds_C3_all)
+
+#Contrast of interest
+#res_C3_shrunk <- results(dds_C3_all, contrast = c("RNA_source", "IMR32", "UHRR"), alpha = 0.05)
+res_C3_shrunk <- lfcShrink(dds_C3_all, coef="RNA_source_UHRR_vs_IMR32", type="apeglm")
+
+
+resOrdered_C3 <- as.data.frame(res_C3_shrunk) %>%
+  rownames_to_column(var = "ensembl_geneID") %>%
+  dplyr::arrange(desc(abs(log2FoldChange))) 
+
+resOrdered_RP_C3 <- resOrdered_RP_shrunk %>% dplyr::filter(ensembl_geneID %in% C3_new$GeneID) %>% column_to_rownames(var="ensembl_geneID")
+#select only targeted genes
+resOrdered_target_C3 <- resOrdered_C3 %>% dplyr::filter(ensembl_geneID %in% C3_new$GeneID) %>% column_to_rownames(var="ensembl_geneID")
+
+common_genes <- base::intersect(rownames(resOrdered_target_C3), rownames(resOrdered_RP_C3))
+
+resOrdered_target_C3 <- resOrdered_target_C3[common_genes,]
+resOrdered_RP_C3 <- resOrdered_RP_C3[common_genes,]
+
+pearson<- cor(resOrdered_target_C3$log2FoldChange, resOrdered_RP_C3$log2FoldChange, method = "pearson")
+spearman<- cor(resOrdered_target_C3$log2FoldChange, resOrdered_RP_C3$log2FoldChange, method = "spearman")
+
+plot_data_C3 <- data.frame(Targeted = resOrdered_target_C3$log2FoldChange, Random = resOrdered_RP_C3$log2FoldChange, pool=c(rep("P3", nrow(resOrdered_target_C3))), row.names = rownames(resOrdered_RP_C3))
+#write.csv(plot_data_C3, "Data/results/LOG2FC_C3.csv")
+```
+
+## Pool C4
+
+```{r}
+FC_counts <- read_delim("Data/Target_counts_UHRR_IMR32.txt") %>% column_to_rownames(var="ensembl_gene_id")
+samples_to_retain <- ann_targeted_filt$SampleID[ann_targeted_filt$Condition%in% c("UHRR_C4_1nM", "IMR32_C4_1nM")]
+
+FC_counts_filt<- FC_counts %>% select(c(samples_to_retain))
+class_coldata <- ann_targeted_filt[ann_targeted_filt$SampleID %in% samples_to_retain,]
+class_coldata$Concentration <- base::as.factor(class_coldata$Concentration)
+class_coldata$RNA_source <- base::as.factor(class_coldata$RNA_source)
+result <- filter_genes_by_replicates(FC_counts_filt, class_coldata, count_cutoff = 10)
+class3_counts <- result$filtered_matrix
+#model overall UHRRvsIMR32 effect
+dds_C3_all <- DESeqDataSetFromMatrix(countData = class3_counts,
+                              colData = class_coldata,
+                              design = ~ RNA_source)
+
+dds_C3_all <- DESeq(dds_C3_all)
+
+#Contrast of interest
+#res_C3_shrunk <- results(dds_C3_all, contrast = c("RNA_source", "IMR32", "UHRR"), alpha = 0.05)
+res_C3_shrunk <- lfcShrink(dds_C3_all, coef="RNA_source_UHRR_vs_IMR32", type="apeglm")
+
+
+resOrdered_C3 <- as.data.frame(res_C3_shrunk) %>%
+  rownames_to_column(var = "ensembl_geneID") %>%
+  dplyr::arrange(desc(abs(log2FoldChange))) 
+
+resOrdered_RP_C3 <- resOrdered_RP_shrunk %>% dplyr::filter(ensembl_geneID %in% C4_new$GeneID) %>% column_to_rownames(var="ensembl_geneID")
+#select only targeted genes
+resOrdered_target_C3 <- resOrdered_C3 %>% dplyr::filter(ensembl_geneID %in% C4_new$GeneID) %>% column_to_rownames(var="ensembl_geneID")
+
+common_genes <- base::intersect(rownames(resOrdered_target_C3), rownames(resOrdered_RP_C3))
+
+resOrdered_target_C3 <- resOrdered_target_C3[common_genes,]
+resOrdered_RP_C3 <- resOrdered_RP_C3[common_genes,]
+
+pearson<- cor(resOrdered_target_C3$log2FoldChange, resOrdered_RP_C3$log2FoldChange, method = "pearson")
+spearman<- cor(resOrdered_target_C3$log2FoldChange, resOrdered_RP_C3$log2FoldChange, method = "spearman")
+
+plot_data_C4 <- data.frame(Targeted = resOrdered_target_C3$log2FoldChange, Random = resOrdered_RP_C3$log2FoldChange, pool=c(rep("P4", nrow(resOrdered_target_C3))), row.names = rownames(resOrdered_RP_C3))
+#write.csv(plot_data_C4, "Data/results/LOG2FC_C4.csv")
+```
+
+
+#Correlation
+
+```{r}
+plot_data_full <- rbind(plot_data_C3, plot_data_C4)
+
+pearson_cor = cor(plot_data_full$Targeted, plot_data_full$Random, method = "pearson")
+spearman_cor = cor(plot_data_full$Targeted, plot_data_full$Random, method = "spearman")
+
+# Make sure both axes use the same limits so the y = x line is meaningful
+lims <- range(c(plot_data_full$Targeted, plot_data_full$Random), na.rm = TRUE)
+
+# Text label for correlations
+corr_label <- sprintf("Pearson:  %.2f\nSpearman: %.2f",
+                      pearson_cor, spearman_cor)
+
+pltv2<-ggplot(plot_data_full, aes(x = Targeted, y = Random)) +
+geom_point(aes(colour = pool),alpha = 0.5, size = 1) +
+    geom_smooth(method = "lm", color = "red", se = TRUE, alpha = 0.2) +
+  scale_color_manual(values = color_panel) +
+    geom_abline(intercept = 0, slope = 1, linetype = "dashed", 
+                color = "gray40", linewidth = 0.7)+
+  labs(
+      x = "targeted log2fc",
+      y = "random log2fc"
+    ) +
+  annotate("text",
+           x = lims[1], y = lims[2],
+           hjust = 0, vjust = 1,
+           label = corr_label,
+           size = 3.5) +
+    theme_bw() +
+    theme(
+      plot.title = element_text(face = "bold", size = 12),
+      axis.title = element_text(size = 10),
+      strip.text = element_text(size = 9),
+      panel.grid.minor = element_blank()
+    )
+pltv2
+```
+# identifying outliers
+
+```{r}
+plot_data_full %>% filter(abs(Targeted) > 6 | abs(Random) > 6)
+```
+```{r}
+plot_data_full %>% filter(Targeted > -1 & Random < -2)
+```
+```{r}
+base::setdiff(C4_new$GeneID, rownames(plot_data_C4))
+```
+
+
+```{r}
+library(ggrepel)
+
+# make rownames available as a column for labeling
+plot_data_full$gene_id <- rownames(plot_data_full)
+
+#plot_data_full$gene_id["ENSG00000077279"]<-"DCX"
+#plot_data_full["ENSG00000082641"] <-"NFE2L1"
+
+# which genes to label?
+genes_to_label <- c("ENSG00000077279", "ENSG00000082641")  # <- put your two rownames here
+
+pearson_cor = cor(plot_data_full$Targeted, plot_data_full$Random, method = "pearson")
+spearman_cor = cor(plot_data_full$Targeted, plot_data_full$Random, method = "spearman")
+
+lims <- range(c(plot_data_full$Targeted, plot_data_full$Random), na.rm = TRUE)
+
+corr_label <- sprintf("Pearson:  %.2f\nSpearman: %.2f",
+                      pearson_cor, spearman_cor)
+
+pltv2 <- ggplot(plot_data_full, aes(x = Targeted, y = Random)) +
+  geom_point(aes(colour = pool), alpha = 0.5, size = 1) +
+  geom_smooth(method = "lm", color = "red", se = TRUE, alpha = 0.2) +
+  scale_color_manual(values = color_panel) +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", 
+              color = "gray40", linewidth = 0.7) +
+  # label only the selected genes
+  geom_text_repel(
+    data = subset(plot_data_full, gene_id %in% genes_to_label),
+    aes(label = ifelse(gene_id=="ENSG00000077279", "DCX", "NFE2L1")),
+    size = 3,
+    max.overlaps = Inf
+  ) +
+  coord_cartesian(xlim = lims, ylim = lims) +
+  labs(
+    x = "targeted log2fc",
+    y = "random log2fc"
+  ) +
+  annotate("text",
+           x = lims[1], y = lims[2],
+           hjust = 0, vjust = 1,
+           label = corr_label,
+           size = 3.5) +
+  theme_bw() +
+  theme(
+    plot.title = element_text(face = "bold", size = 12),
+    axis.title = element_text(size = 10),
+    strip.text = element_text(size = 9),
+    panel.grid.minor = element_blank()
+  )
+
+pltv2
+
+ggsave("Data/results/v2/logFC_UHRR_IMR32_label.png", pltv2, dpi=300, width = 8, height = 6)
+ggsave("Data/results/v2/logFC_UHRR_IMR32_label.pdf", pltv2, dpi=300, width = 8, height = 6)
+```
+
+
+```{r}
+# removing oulier
+
+plot_data_full_filt <- plot_data_full %>% filter(abs(Targeted) < 6 | abs(Random) < 6)
+plot_data_full_filt <- plot_data_full_filt %>% filter(rownames(plot_data_full_filt) != "ENSG00000082641")  
+
+
+pearson_cor_v2 = cor(plot_data_full_filt$Targeted, plot_data_full_filt$Random, method = "pearson")
+spearman_cor_v2 = cor(plot_data_full_filt$Targeted, plot_data_full_filt$Random, method = "spearman")
+
+# Make sure both axes use the same limits so the y = x line is meaningful
+lims <- range(c(plot_data_full_filt$Targeted, plot_data_full_filt$Random), na.rm = TRUE)
+
+# Text label for correlations
+corr_label <- sprintf("pearson:  %.2f\nspearman: %.2f",
+                      pearson_cor, spearman_cor)
+
+pltv2_filt<-ggplot(plot_data_full_filt, aes(x = Targeted, y = Random)) +
+geom_point(aes(colour = pool),alpha = 0.5, size = 1) +
+    geom_smooth(method = "lm", color = "red", se = TRUE, alpha = 0.2) +
+  scale_color_manual(values = color_panel) +
+    geom_abline(intercept = 0, slope = 1, linetype = "dashed", 
+                color = "gray40", linewidth = 0.7)+
+  labs(
+      x = "targeted log2fc",
+      y = "random log2fc"
+    ) +
+  annotate("text",
+           x = lims[1], y = lims[2],
+           hjust = 0, vjust = 1,
+           label = corr_label,
+           size = 3.5) +
+    theme_bw() +
+    theme(
+      plot.title = element_text(face = "bold", size = 12),
+      axis.title = element_text(size = 10),
+      strip.text = element_text(size = 9),
+      panel.grid.minor = element_blank()
+    )
+pltv2_filt
+```
+
+
+
+## removing the outlier
+
+```{r}
+
+plot_data_full <- rbind(plot_data_C3, plot_data_C4)
+
+plot_data_full <- plot_data_full %>% filter(!rownames(plot_data_full) %in% c("ENSG00000082641"))
+
+pearson_cor = cor(plot_data_full$Targeted, plot_data_full$Random, method = "pearson")
+spearman_cor = cor(plot_data_full$Targeted, plot_data_full$Random, method = "spearman")
+
+# Make sure both axes use the same limits so the y = x line is meaningful
+lims <- range(c(plot_data_full$Targeted, plot_data_full$Random), na.rm = TRUE)
+
+# Text label for correlations
+corr_label <- sprintf("pearson:  %.2f\nspearman: %.2f",
+                      pearson_cor, spearman_cor)
+
+pltv2.1<-ggplot(plot_data_full, aes(x = Targeted, y = Random)) +
+geom_point(aes(colour = pool),alpha = 0.5, size = 1) +
+    geom_smooth(method = "lm", color = "red", se = TRUE, alpha = 0.2) +
+  scale_color_manual(values = color_panel) +
+    geom_abline(intercept = 0, slope = 1, linetype = "dashed", 
+                color = "gray40", linewidth = 0.7)+
+  labs(
+      x = "targeted mean rlog expression",
+      y = "random mean rlog expression"
+    ) +
+  annotate("text",
+           x = lims[1], y = lims[2],
+           hjust = 0, vjust = 1,
+           label = corr_label,
+           size = 3.5) +
+    theme_bw() +
+    theme(
+      plot.title = element_text(face = "bold", size = 12),
+      axis.title = element_text(size = 10),
+      strip.text = element_text(size = 9),
+      panel.grid.minor = element_blank()
+    )
+pltv2.1
+```
+
+### barplots
+
+```{r}
+plot_data_bar <- plot_data_full %>% rownames_to_column(var="ensembl_gene_id") %>% melt(value.name = "FC")
+
+
+p2.bar <- plot_data_bar %>% ggplot(aes(x = ensembl_gene_id, y = FC, fill = variable)) +
+  geom_col(position = position_dodge(width = 0.8)) +  scale_fill_manual(values = color_panel, labels = c("Targeted", "RandomPriming")) +
+  theme_minimal() +  geom_hline(yintercept = c(2, -2), color = "red", linetype = "dashed", linewidth = 0.8) +
+  geom_hline(yintercept = c(1, -1), color = "pink", linetype = "dashed", linewidth = 0.8) +
+  labs(
+    title = "Log2FC Targeted vs Random Priming",
+    x = "Gene",
+    y = "Log2FC"
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 60, hjust = 1),
+    legend.title = element_blank(),
+    plot.margin = margin(t = 5, r = 5, b = 5, l = 10)
+  )
+
+
+p2.bar
+#ggsave("Data/results/Bar_logFC_UHRR_IMR32_C4.png", p2.bar, dpi=300, width = 8, height = 6)
+```
+
+
+
+

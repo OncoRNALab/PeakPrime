@@ -10,9 +10,9 @@ This branch provides the reference data, and intermediate outputs used to reprod
 
 ## Repository Layout
 
-- `data/` – Reference annotations, transcriptome indices, and any fixed resources required to run the workflow.
-- `results/` – Workflow outputs generated for the manuscript (per-gene primers, QC tables, and figures).
-- `scripts/` - Rscripts to reproduce the manuscript figures
+- `data/` – Primer panel spreadsheets (`C3pool_primers.csv`, `C4pool_primers.csv`), random-primed gene counts for IMR32 and UHRR, targeted-sample count matrices, and the `Target_ann.csv` annotation used throughout the manuscript.
+- `scripts/` – R Markdown notebooks to recreate the figures (`01_enrichment.Rmd` for Figure 2 barplots, `02_RlogCorr.Rmd` for Figure 3 rlog correlations, `03_LogFCCorr.Rmd` for Figure 4 fold-changes) plus shared helpers in `utils.R`.
+- `results/` – Output directory for regenerated figures, tables, and QC artifacts produced by the scripts.
 
 Populate each directory with the finalized assets before publication submission.
 

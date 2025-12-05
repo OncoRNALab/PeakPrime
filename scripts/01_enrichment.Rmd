@@ -1,0 +1,246 @@
+---
+title: "Enrichment"
+author: "Franco"
+date: "2025-11-18"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+require(dplyr)
+require(ggplot2)
+require(tidyr)
+require(reshape2)
+require(tibble)
+require(Hmisc)
+require(plotly)
+require(readr)
+require(biomaRt)
+require(ggpubr)
+require(stringr)
+#require(DESeq2)
+library(conflicted)
+require(edgeR)
+#source("utils.R")
+conflict_prefer("summarise", "dplyr")
+conflicts_prefer(dplyr::summarize)
+conflict_prefer("filter", "dplyr")
+conflict_prefer("select", "dplyr")
+
+color_panel <- c("steelblue", "darkgray", "#e35d6a", "orange", "pink")
+```
+
+# Loading targeted annotation
+```{r}
+#loading and making annotation
+ann <- read_csv("Data/Target_ann.csv")
+#annotation
+ann_targeted_filt <-ann %>% dplyr::filter(RNA_source%in%c("UHRR","IMR32")) %>% dplyr::select(c("SampleID", "Condition", "Concentration", "RNA_source", "Class", ))
+#Loading target gene ids
+C3_new<- read_csv("Data/results/C3pool_primers.csv")
+C4_new<- read_csv("Data/results/C4pool_primers.csv")
+```
+# Whole transcriptome counts 
+
+```{r}
+#IMR32
+#loading raw IMR32 counts
+IMR32_RP <- read_delim("Data/IMR32_RP_counts.txt")
+colnames(IMR32_RP)[1]<-"ensembl_gene_id"
+sample_names<-colnames(IMR32_RP)[2:ncol(IMR32_RP)]
+sample_names<-str_extract(sample_names, "RNA\\d+")
+colnames(IMR32_RP)[2:ncol(IMR32_RP)]<-sample_names
+IMR32_RP <- IMR32_RP %>% column_to_rownames(var="ensembl_gene_id")
+#make CPM counts
+imr_cpm_raw_counts <- cpm(IMR32_RP)
+#IMR32
+#loading raw counts, and targeted counts
+raw_counts <- read_delim("Data/UHRR_RP_counts.txt")
+#edit raw counts data frame
+raw_counts <- raw_counts %>% column_to_rownames(var="ensembl_gene_id")
+uhrr_cpm_raw_counts <- cpm(raw_counts)
+```
+```{r}
+imr32_included_primers_C3 <- base::intersect(rownames(IMR32_RP), C3_new$GeneID)
+imr32_included_primers_C4 <- base::intersect(rownames(IMR32_RP), C4_new$GeneID)
+```
+ 
+
+## Filtering targeted count per class
+
+```{r}
+#loading targeted counts
+FC_counts<- read_delim("./Data/targeted_counts.txt")
+#loading and making annotation
+ann <- read_csv("Data/TLP11/annotation_TLP11.csv")
+sample_names_2<-str_extract(ann$Sample, "RNA\\d+")
+ann$Sample <- sample_names_2
+colnames(ann)[1]<-"SampleID"
+
+# UHRR and IMR3 Class3 
+
+sample_names <- ann$SampleID[str_detect(ann$Condition, "UHRR_C3_1nM|IMR32_C3_1nM")]
+Class3_counts <- FC_counts %>% column_to_rownames(var="ensembl_gene_id") %>% dplyr::select(sample_names) 
+sample_names <- ann$SampleID[str_detect(ann$Condition, "UHRR_C4_1nM|IMR32_C4_1nM")]
+Class4_counts <- FC_counts %>% column_to_rownames(var="ensembl_gene_id") %>% dplyr::select(sample_names)
+
+#get CPM counts
+
+C3_cpm <- cpm(Class3_counts)
+C4_cpm <- cpm(Class4_counts)
+```
+
+
+```{r}
+# Calculate percentage of target genes per sample in random priming libraries
+#C3
+target_genes <- C3_new$GeneID
+#UHRR
+cpm_matrix <- uhrr_cpm_raw_counts
+target_genes_in_matrix <- target_genes[target_genes %in% rownames(cpm_matrix)]
+target_cpm <- colSums(cpm_matrix[target_genes_in_matrix, , drop = FALSE])
+total_cpm_uhrr <- colSums(cpm_matrix)
+percentage_uhrr <- (target_cpm / total_cpm_uhrr) * 100
+
+#IMR32
+cpm_matrix <- imr_cpm_raw_counts
+target_genes_in_matrix <- target_genes[target_genes %in% rownames(cpm_matrix)]
+target_cpm <- colSums(cpm_matrix[target_genes_in_matrix, , drop = FALSE])
+total_cpm_imr <- colSums(cpm_matrix)
+percentage_imr <- (target_cpm / total_cpm_imr) * 100
+
+# Calculate percentage of target genes per sample
+target_genes_in_matrix <- target_genes[target_genes %in% rownames(C3_cpm)]
+target_cpm <- colSums(C3_cpm[target_genes_in_matrix, , drop = FALSE])
+total_cpm <- colSums(C3_cpm)
+percentage <- (target_cpm / total_cpm) * 100
+
+percentage_full<-c(percentage_uhrr, percentage_imr, percentage)
+  #Type = c(rep("UHRR",6), rep("IMR32", 2), rep("UHRR_C3", 4), rep("IMR32_C3", 4))
+# Create data frame for plotting
+
+plot_data <- data.frame(
+  SampleID = names(percentage_full),
+  Percentage = percentage_full,
+  RNA_source = c(rep("UHRR",2), rep("IMR32", 2), rep("UHRR", 2), rep("IMR32", 2)) 
+
+)
+
+plot_data <- plot_data %>% left_join(ann_targeted_filt, by="SampleID") 
+plot_data[is.na(plot_data)]<-"RP"
+plot_data_C3 <- plot_data %>%  dplyr::select(c("Class", "Condition", "Percentage", "SampleID"))
+
+plt_c3<-ggplot(plot_data_C3, aes(x = SampleID, y = Percentage, fill = Condition)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = color_panel) +
+  labs(
+    title = "",
+    x = "",
+    y = "% of Total CPM"
+  ) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+plt_c3
+```
+
+
+```{r}
+# Calculate percentage of target genes per sample in random priming libraries
+#C3
+target_genes <- C4_new$GeneID
+#UHRR
+cpm_matrix <- uhrr_cpm_raw_counts
+target_genes_in_matrix <- target_genes[target_genes %in% rownames(cpm_matrix)]
+target_cpm <- colSums(cpm_matrix[target_genes_in_matrix, , drop = FALSE])
+total_cpm_uhrr <- colSums(cpm_matrix)
+percentage_uhrr <- (target_cpm / total_cpm_uhrr) * 100
+
+#IMR32
+cpm_matrix <- imr_cpm_raw_counts
+target_genes_in_matrix <- target_genes[target_genes %in% rownames(cpm_matrix)]
+target_cpm <- colSums(cpm_matrix[target_genes_in_matrix, , drop = FALSE])
+total_cpm_imr <- colSums(cpm_matrix)
+percentage_imr <- (target_cpm / total_cpm_imr) * 100
+
+# Calculate percentage of target genes per sample
+target_genes_in_matrix <- target_genes[target_genes %in% rownames(C4_cpm)]
+target_cpm <- colSums(C4_cpm[target_genes_in_matrix, , drop = FALSE])
+total_cpm <- colSums(C4_cpm)
+percentage <- (target_cpm / total_cpm) * 100
+
+percentage_full<-c(percentage_uhrr, percentage_imr, percentage)
+  #Type = c(rep("UHRR",6), rep("IMR32", 2), rep("UHRR_C3", 4), rep("IMR32_C3", 4))
+# Create data frame for plotting
+plot_data <- data.frame(
+  SampleID = names(percentage_full),
+  Percentage = percentage_full,
+  RNA_source = c(rep("UHRR",2), rep("IMR32", 2), rep("UHRR", 2), rep("IMR32", 2)) 
+
+)
+
+plot_data <- plot_data %>% left_join(ann_targeted_filt, by="SampleID") 
+plot_data[is.na(plot_data)]<-"RP"
+plot_data_C4 <- plot_data %>%  dplyr::select(c("Class", "Condition", "Percentage", "SampleID"))
+
+plt_c4<-ggplot(plot_data_C4, aes(x = SampleID, y = Percentage, fill = Condition)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = color_panel) +
+  labs(
+    title = "",
+    x = "",
+    y = "% of Total CPM"
+  ) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+plt_c4
+```
+
+```{r}
+plot_data_full <- rbind(plot_data_C3, plot_data_C4)
+plot_data_full$type <- c(rep("UHRR", 2), rep("IMR32", 2), rep("UHRR", 2), rep("IMR32", 2), rep("UHRR", 2), rep("IMR32", 2), rep("UHRR", 2), rep("IMR32", 2))
+
+plot_data_full$class <- c(rep("pool_C3", 8), rep("pool_C4", 8))
+plot_data_full$condition <- ifelse(plot_data_full$Condition=="RP", "random", "targeted")
+
+```
+
+
+
+```{r}
+df_sum <- plot_data_full %>%
+  group_by(class, condition, type) %>%
+  summarise(
+    mean_prct = mean(Percentage),
+    sd = sd(Percentage),
+    n = n(),
+    se = sd / sqrt(n)
+  )
+
+
+plt_enrich <- ggplot(df_sum, aes(x = condition, y = mean_prct, fill = type)) +
+  scale_fill_manual(values = color_panel) +
+  # mean as bar
+  stat_summary(
+    fun = mean,
+    geom = "col",
+    position = position_dodge(width = 0.8)
+  ) +
+  facet_wrap(~ class) +
+  labs(x = "", y = "percentage of total cpm") +
+  theme(
+      axis.title = element_text(size = 10),
+      axis.text = element_text(size = 10),
+      strip.text = element_text(size = 10),
+      legend.text = element_text(size = 10),
+      panel.grid.minor = element_blank()
+    ) +
+  theme_bw()
+
+
+plt_enrich
+
+#ggsave("Data/results/Target_enrichment.png", plt_enrich, dpi = 300, width = 6, height = 4)
+```
+

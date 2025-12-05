@@ -1,0 +1,441 @@
+---
+title: "Counts Correlation UHRR"
+author: "Franco"
+date: "2025-11-10"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+require(dplyr)
+require(ggplot2)
+require(tidyr)
+require(reshape2)
+require(tibble)
+require(Hmisc)
+require(plotly)
+require(readr)
+require(biomaRt)
+require(ggpubr)
+require(stringr)
+require(DESeq2)
+library(conflicted)
+source("utils.R")
+conflict_prefer("summarise", "dplyr")
+conflicts_prefer(dplyr::summarize)
+conflict_prefer("filter", "dplyr")
+conflict_prefer("select", "dplyr")
+color_panel <- c("steelblue", "darkgray", "#e35d6a")
+```
+
+# UHRR
+```{r}
+C3_new<- read_csv("Data/results/C3pool_primers.csv")
+C4_new<- read_csv("Data/results/C4pool_primers.csv")
+```
+
+
+## Whole transcriptome counts 
+
+```{r}
+#loading raw counts, and targeted counts
+raw_counts <- read_delim("Data/UHRR_RP_counts.txt")
+raw_counts <- raw_counts %>% column_to_rownames(var = "ensembl_gene_id")
+
+
+#making whole transcriptome annotation
+colData_df <- data.frame(
+  SampleID = colnames(raw_counts),
+  Condition = c(rep("RP",2)),
+  RNA_source = c(rep("UHRR", 2)),
+  Class = c(rep("WT",2))
+)
+
+# filter raw counts
+#QC Filtering
+cutoff_raw = 10
+smallestGroupSize <- 2
+keep <- rowSums(raw_counts >= cutoff_raw) >= smallestGroupSize
+raw_counts_filt <- raw_counts[keep,]
+```
+
+
+# CLASS 3
+
+```{r}
+FC_counts <- read_delim("Data/targeted_counts.txt") %>% column_to_rownames(var="ensembl_gene_id")
+ann <- read_csv("./Data/Target_ann.csv")
+ann_uhrr_C3 <- ann %>% dplyr::filter(str_detect(ann$Condition, "UHRR_C3"))
+
+C3_counts <- FC_counts %>% select(ann_uhrr_C3$SampleID)
+
+cutoff_raw = 10
+smallestGroupSize <- 2
+keep <- rowSums(C3_counts >= cutoff_raw) >= smallestGroupSize
+UHRR_C3_filt <- C3_counts[keep,]
+
+#retain only targeted genes
+C3_counts <- UHRR_C3_filt %>% dplyr::filter(rownames(UHRR_C3_filt)%in%C3_new$GeneID)
+
+#Join count matrix
+set1<- c(rownames(C3_counts))
+set2<-c(rownames(raw_counts_filt))
+common_genes <- base::intersect(set2, set1)
+
+C3_counts <- C3_counts %>% dplyr::filter(rownames(C3_counts) %in% common_genes)
+random_C3 <- raw_counts_filt %>% dplyr::filter(rownames(raw_counts_filt) %in% common_genes)
+full_counts <- cbind(C3_counts, random_C3)
+# join coldata
+
+target_coldata <- ann_uhrr_C3 %>% column_to_rownames(var="SampleID")
+target_coldata <- target_coldata %>% dplyr::select(!c("Concentration", "Annotation"))
+random_coldata <- colData_df %>% column_to_rownames(var="SampleID")
+
+coldata_merged<- rbind(target_coldata, random_coldata)
+
+dds <- DESeqDataSetFromMatrix(countData = full_counts,
+                              colData = coldata_merged,
+                              design = ~ Condition)
+dds <- DESeq(dds)
+rld <- rlog(dds, blind=TRUE)
+rlog_counts_targeted <- assay(rld)
+
+#Correlations
+conditions_targeted <- unique(coldata_merged$Condition)
+mean_list_targeted <- list()
+
+for (cond in conditions_targeted) {
+  samples_in_cond <- rownames(coldata_merged)[coldata_merged$Condition == cond]
+  mean_list_targeted[[cond]] <- rowMeans(rlog_counts_targeted[,samples_in_cond, drop = FALSE])
+}
+
+
+plot_data <- data.frame(
+    Targeted = mean_list_targeted$UHRR_C3_1nM,
+    Random = mean_list_targeted$RP,
+    pool = c(rep("C3", length(mean_list_targeted$UHRR_C3_1nM))),
+    stringsAsFactors = FALSE
+  )
+
+```
+# CLASS 4
+
+```{r}
+FC_counts <- read_delim("Data/Target_counts_UHRR_IMR32.txt") %>% column_to_rownames(var="ensembl_gene_id")
+ann <- read_csv("Data/Target_ann.csv")
+ann_uhrr_C4 <- ann %>% dplyr::filter(str_detect(ann$Condition, "UHRR_C4"))
+
+C4_counts <- FC_counts %>% select(ann_uhrr_C4$SampleID)
+
+cutoff_raw = 10
+smallestGroupSize <- 2
+keep <- rowSums(C4_counts >= cutoff_raw) >= smallestGroupSize
+UHRR_C4_filt <- C4_counts[keep,]
+
+#retain only targeted genes
+C4_counts <- UHRR_C4_filt %>% dplyr::filter(rownames(UHRR_C4_filt)%in%C4_new$GeneID)
+
+#Join count matrix
+set1<- c(rownames(C4_counts))
+set2<-c(rownames(raw_counts_filt))
+common_genes <- base::intersect(set2, set1)
+
+C4_counts <- C4_counts %>% dplyr::filter(rownames(C4_counts) %in% common_genes)
+random_C4 <- raw_counts_filt %>% dplyr::filter(rownames(raw_counts_filt) %in% common_genes)
+full_counts <- cbind(C4_counts, random_C4)
+# join coldata
+
+target_coldata <- ann_uhrr_C4 %>% column_to_rownames(var="SampleID")
+target_coldata <- target_coldata %>% dplyr::select(!c("Concentration", "Annotation"))
+random_coldata <- colData_df %>% column_to_rownames(var="SampleID")
+
+coldata_merged<- rbind(target_coldata, random_coldata)
+
+dds <- DESeqDataSetFromMatrix(countData = full_counts,
+                              colData = coldata_merged,
+                              design = ~ Condition)
+dds <- DESeq(dds)
+rld <- rlog(dds, blind=TRUE)
+rlog_counts_targeted <- assay(rld)
+
+#Correlations
+conditions_targeted <- unique(coldata_merged$Condition)
+mean_list_targeted <- list()
+
+for (cond in conditions_targeted) {
+  samples_in_cond <- rownames(coldata_merged)[coldata_merged$Condition == cond]
+  mean_list_targeted[[cond]] <- rowMeans(rlog_counts_targeted[,samples_in_cond, drop = FALSE])
+}
+
+# Compute correlations between Rp and targeted
+pearson_cor = cor(mean_list_targeted$UHRR_C4_1nM, mean_list_targeted$RP, method = "pearson")
+spearman_cor = cor(mean_list_targeted$UHRR_C4_1nM, mean_list_targeted$RP, method = "spearman")
+
+
+plot_data_C4 <- data.frame(
+    Targeted = mean_list_targeted$UHRR_C4_1nM,
+    Random = mean_list_targeted$RP,
+    pool = c(rep("C4", length(mean_list_targeted$UHRR_C4_1nM))),
+    stringsAsFactors = FALSE
+  )
+
+```
+
+```{r}
+plot_data_full<-rbind(plot_data, plot_data_C4)
+#write_csv(plot_data_full, "Data/results/rlog_UHRR.csv")
+pearson_cor = cor(plot_data_full$Targeted, plot_data_full$Random, method = "pearson")
+spearman_cor = cor(plot_data_full$Targeted, plot_data_full$Random, method = "spearman")
+```
+
+```{r}
+# Make sure both axes use the same limits so the y = x line is meaningful
+lims <- range(c(plot_data_full$Targeted, plot_data_full$Random), na.rm = TRUE)
+
+# Text label for correlations
+corr_label <- sprintf("pearson:  %.2f\nspearman: %.2f",
+                      pearson_cor, spearman_cor)
+
+pltv2<-ggplot(plot_data_full, aes(x = Targeted, y = Random)) +
+geom_point(aes(colour = pool),alpha = 0.5, size = 1) +
+    geom_smooth(method = "lm", color = "red", se = TRUE, alpha = 0.2) +
+  scale_color_manual(values = color_panel) +
+    geom_abline(intercept = 0, slope = 1, linetype = "dashed", 
+                color = "gray40", linewidth = 0.7)+
+  labs(
+      x = "targeted mean rlog expression",
+      y = "random mean rlog expression"
+    ) +
+  annotate("text",
+           x = lims[1], y = lims[2],
+           hjust = 0, vjust = 1,
+           label = corr_label,
+           size = 3.5) +
+    theme_bw() +
+    theme(
+      plot.title = element_text(face = "bold", size = 12),
+      axis.title = element_text(size = 10),
+      strip.text = element_text(size = 9),
+      panel.grid.minor = element_blank()
+    )
+pltv2
+```
+
+
+# IMR32
+
+
+## Whole transcriptome counts 
+
+```{r}
+#loading raw counts, and targeted counts
+raw_counts <- read_delim("Data/merged_gene_counts_RP_IMR32_raw.txt")
+colnames(raw_counts)[1]<-"ensembl_gene_id"
+sample_names<-colnames(raw_counts)[2:ncol(raw_counts)]
+sample_names<-str_extract(sample_names, "RNA\\d+")
+colnames(raw_counts)[2:ncol(raw_counts)]<-sample_names
+
+raw_counts <- raw_counts %>% column_to_rownames(var="ensembl_gene_id")
+
+
+colData_df <- data.frame(
+  SampleID = sample_names,
+  Condition = c(rep("RP",2)),
+  RNA_source = c(rep("IMR32", 2)),
+  Class = c(rep("WT",2))
+)
+
+# filter raw counts
+#QC Filtering
+cutoff_raw = 10
+smallestGroupSize <- 2
+keep <- rowSums(raw_counts >= cutoff_raw) >= smallestGroupSize
+raw_counts_filt <- raw_counts[keep,]
+```
+
+## C3 pool
+```{r}
+FC_counts <- read_delim("Data/Target_counts_UHRR_IMR32.txt") %>% column_to_rownames(var="ensembl_gene_id")
+ann <- read_csv("Data/Target_ann.csv")
+ann_uhrr_C3 <- ann %>% dplyr::filter(str_detect(ann$Condition, "IMR32_C3"))
+
+C3_counts <- FC_counts %>% select(ann_uhrr_C3$SampleID)
+
+cutoff_raw = 10
+smallestGroupSize <- 2
+keep <- rowSums(C3_counts >= cutoff_raw) >= smallestGroupSize
+UHRR_C3_filt <- C3_counts[keep,]
+
+#retain only targeted genes
+C3_counts <- UHRR_C3_filt %>% dplyr::filter(rownames(UHRR_C3_filt)%in%C3_new$GeneID)
+
+#Join count matrix
+set1<- c(rownames(C3_counts))
+set2<-c(rownames(raw_counts_filt))
+common_genes <- base::intersect(set2, set1)
+
+C3_counts <- C3_counts %>% dplyr::filter(rownames(C3_counts) %in% common_genes)
+random_C3 <- raw_counts_filt %>% dplyr::filter(rownames(raw_counts_filt) %in% common_genes)
+full_counts <- cbind(C3_counts, random_C3)
+# join coldata
+
+target_coldata <- ann_uhrr_C3 %>% column_to_rownames(var="SampleID")
+target_coldata <- target_coldata %>% dplyr::select(!c("Concentration", "Annotation"))
+random_coldata <- colData_df %>% column_to_rownames(var="SampleID")
+
+coldata_merged<- rbind(target_coldata, random_coldata)
+
+dds <- DESeqDataSetFromMatrix(countData = full_counts,
+                              colData = coldata_merged,
+                              design = ~ Condition)
+dds <- DESeq(dds)
+rld <- rlog(dds, blind=TRUE)
+rlog_counts_targeted <- assay(rld)
+
+#Correlations
+conditions_targeted <- unique(coldata_merged$Condition)
+mean_list_targeted <- list()
+
+for (cond in conditions_targeted) {
+  samples_in_cond <- rownames(coldata_merged)[coldata_merged$Condition == cond]
+  mean_list_targeted[[cond]] <- rowMeans(rlog_counts_targeted[,samples_in_cond, drop = FALSE])
+}
+
+# Compute correlations between Rp and targeted
+pearson_cor = cor(mean_list_targeted$IMR32_C3_1nM, mean_list_targeted$RP, method = "pearson")
+spearman_cor = cor(mean_list_targeted$IMR32_C3_1nM, mean_list_targeted$RP, method = "spearman")
+
+
+plot_data <- data.frame(
+    Targeted = mean_list_targeted$IMR32_C3_1nM,
+    Random = mean_list_targeted$RP,
+    pool = c(rep("C3", length(mean_list_targeted$IMR32_C3_1nM))),
+    stringsAsFactors = FALSE
+  )
+
+```
+
+## C4 pool
+
+```{r}
+ann_uhrr_C3 <- ann %>% dplyr::filter(str_detect(ann$Condition, "IMR32_C4"))
+
+C3_counts <- FC_counts %>% select(ann_uhrr_C3$SampleID)
+
+cutoff_raw = 10
+smallestGroupSize <- 2
+keep <- rowSums(C3_counts >= cutoff_raw) >= smallestGroupSize
+UHRR_C3_filt <- C3_counts[keep,]
+
+#retain only targeted genes
+C3_counts <- UHRR_C3_filt %>% dplyr::filter(rownames(UHRR_C3_filt)%in%C4_new$GeneID)
+
+#Join count matrix
+set1<- c(rownames(C3_counts))
+set2<-c(rownames(raw_counts_filt))
+common_genes <- base::intersect(set2, set1)
+
+C3_counts <- C3_counts %>% dplyr::filter(rownames(C3_counts) %in% common_genes)
+random_C3 <- raw_counts_filt %>% dplyr::filter(rownames(raw_counts_filt) %in% common_genes)
+full_counts <- cbind(C3_counts, random_C3)
+# join coldata
+
+target_coldata <- ann_uhrr_C3 %>% column_to_rownames(var="SampleID")
+target_coldata <- target_coldata %>% dplyr::select(!c("Concentration", "Annotation"))
+random_coldata <- colData_df %>% column_to_rownames(var="SampleID")
+
+coldata_merged<- rbind(target_coldata, random_coldata)
+
+dds <- DESeqDataSetFromMatrix(countData = full_counts,
+                              colData = coldata_merged,
+                              design = ~ Condition)
+dds <- DESeq(dds)
+rld <- rlog(dds, blind=TRUE)
+rlog_counts_targeted <- assay(rld)
+
+#Correlations
+conditions_targeted <- unique(coldata_merged$Condition)
+mean_list_targeted <- list()
+
+for (cond in conditions_targeted) {
+  samples_in_cond <- rownames(coldata_merged)[coldata_merged$Condition == cond]
+  mean_list_targeted[[cond]] <- rowMeans(rlog_counts_targeted[,samples_in_cond, drop = FALSE])
+}
+
+# Compute correlations between Rp and targeted
+pearson_cor = cor(mean_list_targeted$IMR32_C4_1nM, mean_list_targeted$RP, method = "pearson")
+spearman_cor = cor(mean_list_targeted$IMR32_C4_1nM, mean_list_targeted$RP, method = "spearman")
+
+plot_data_C4 <- data.frame(
+    Targeted = mean_list_targeted$IMR32_C4_1nM,
+    Random = mean_list_targeted$RP,
+    pool = c(rep("C4", length(mean_list_targeted$IMR32_C4_1nM))),
+    stringsAsFactors = FALSE
+  )
+
+```
+
+
+```{r}
+plot_data_full<-rbind(plot_data, plot_data_C4)
+#write_csv(plot_data_full, "Data/results/rlog_IMR32.csv")
+# Compute correlations between Rp and targeted
+pearson_cor_imr = cor(plot_data_full$Targeted, plot_data_full$Random, method = "pearson")
+spearman_cor_imr = cor(plot_data_full$Targeted, plot_data_full$Random, method = "spearman")
+```
+
+```{r}
+# Make sure both axes use the same limits so the y = x line is meaningful
+lims <- range(c(plot_data_full$Targeted, plot_data_full$Random), na.rm = TRUE)
+
+# Text label for correlations
+corr_label <- sprintf("pearson:  %.2f\nspearman: %.2f",
+                      pearson_cor_imr, spearman_cor_imr)
+
+pltv3<-ggplot(plot_data_full, aes(x = Targeted, y = Random)) +
+geom_point(aes(colour = pool),alpha = 0.5, size = 1) +
+    geom_smooth(method = "lm", color = "red", se = TRUE, alpha = 0.2) +
+  scale_color_manual(values = color_panel) +
+    geom_abline(intercept = 0, slope = 1, linetype = "dashed", 
+                color = "gray40", linewidth = 0.7)+
+  labs(
+      x = "targeted mean rlog expression",
+      y = "random mean rlog expression"
+    ) +
+  annotate("text",
+           x = lims[1], y = lims[2],
+           hjust = 0, vjust = 1,
+           label = corr_label,
+           size = 3.5) +
+    theme_bw() +
+    theme(
+      plot.title = element_text(face = "bold", size = 12),
+      axis.title = element_text(size = 10),
+      strip.text = element_text(size = 9),
+      panel.grid.minor = element_blank()
+    )
+pltv3
+```
+
+```{r}
+
+pltv2 <- pltv2 + theme(plot.margin = margin(t = 17, r = 5, b = 5, l = 5))
+pltv3 <- pltv3 + theme(plot.margin = margin(t = 17, r = 5, b = 5, l = 5))
+
+combined_plot <- ggarrange(
+  pltv2, pltv3,
+  ncol = 2,             
+  nrow = 1,
+  labels = c("UHRR", "IMR32"),
+  label.y=1,
+  font.label = list(size = 10),
+  common.legend = TRUE,
+  legend = "right"      
+)
+combined_plot
+
+```
+```{r}
+ggsave("Data/results/v2/rlog_corr_UHRR_IMR32.png", combined_plot, dpi=300, width = 8, height = 4)
+```
+
