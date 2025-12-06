@@ -33,19 +33,19 @@ color_panel <- c("steelblue", "darkgray", "#e35d6a", "orange", "pink")
 # Loading targeted annotation
 ```{r}
 #loading and making annotation
-ann <- read_csv("Data/Target_ann.csv")
+ann <- read_csv("../data/Target_ann.csv")
 #annotation
 ann_targeted_filt <-ann %>% dplyr::filter(RNA_source%in%c("UHRR","IMR32")) %>% dplyr::select(c("SampleID", "Condition", "Concentration", "RNA_source", "Class", ))
 #Loading target gene ids
-C3_new<- read_csv("Data/results/C3pool_primers.csv")
-C4_new<- read_csv("Data/results/C4pool_primers.csv")
+C3_new<- read_csv("../data/C3pool_primers.csv")
+C4_new<- read_csv("../data/C4pool_primers.csv")
 ```
 # Whole transcriptome counts 
 
 ```{r}
 #IMR32
 #loading raw IMR32 counts
-IMR32_RP <- read_delim("Data/IMR32_RP_counts.txt")
+IMR32_RP <- read_delim("../data/IMR32_RP_counts.txt")
 colnames(IMR32_RP)[1]<-"ensembl_gene_id"
 sample_names<-colnames(IMR32_RP)[2:ncol(IMR32_RP)]
 sample_names<-str_extract(sample_names, "RNA\\d+")
@@ -55,7 +55,7 @@ IMR32_RP <- IMR32_RP %>% column_to_rownames(var="ensembl_gene_id")
 imr_cpm_raw_counts <- cpm(IMR32_RP)
 #IMR32
 #loading raw counts, and targeted counts
-raw_counts <- read_delim("Data/UHRR_RP_counts.txt")
+raw_counts <- read_delim("../data/UHRR_RP_counts.txt")
 #edit raw counts data frame
 raw_counts <- raw_counts %>% column_to_rownames(var="ensembl_gene_id")
 uhrr_cpm_raw_counts <- cpm(raw_counts)
@@ -70,13 +70,7 @@ imr32_included_primers_C4 <- base::intersect(rownames(IMR32_RP), C4_new$GeneID)
 
 ```{r}
 #loading targeted counts
-FC_counts<- read_delim("./Data/targeted_counts.txt")
-#loading and making annotation
-ann <- read_csv("Data/TLP11/annotation_TLP11.csv")
-sample_names_2<-str_extract(ann$Sample, "RNA\\d+")
-ann$Sample <- sample_names_2
-colnames(ann)[1]<-"SampleID"
-
+FC_counts<- read_delim("../data/targeted_counts.txt")
 # UHRR and IMR3 Class3 
 
 sample_names <- ann$SampleID[str_detect(ann$Condition, "UHRR_C3_1nM|IMR32_C3_1nM")]
@@ -241,6 +235,6 @@ plt_enrich <- ggplot(df_sum, aes(x = condition, y = mean_prct, fill = type)) +
 
 plt_enrich
 
-#ggsave("Data/results/Target_enrichment.png", plt_enrich, dpi = 300, width = 6, height = 4)
+#ggsave("../results/figures/Target_enrichment.png", plt_enrich, dpi = 300, width = 6, height = 4)
 ```
 

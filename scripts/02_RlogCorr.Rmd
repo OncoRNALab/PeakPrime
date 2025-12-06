@@ -30,8 +30,8 @@ color_panel <- c("steelblue", "darkgray", "#e35d6a")
 
 # UHRR
 ```{r}
-C3_new<- read_csv("Data/results/C3pool_primers.csv")
-C4_new<- read_csv("Data/results/C4pool_primers.csv")
+C3_new<- read_csv("../data/C3pool_primers.csv")
+C4_new<- read_csv("../data/C4pool_primers.csv")
 ```
 
 
@@ -39,7 +39,7 @@ C4_new<- read_csv("Data/results/C4pool_primers.csv")
 
 ```{r}
 #loading raw counts, and targeted counts
-raw_counts <- read_delim("Data/UHRR_RP_counts.txt")
+raw_counts <- read_delim("../data/UHRR_RP_counts.txt")
 raw_counts <- raw_counts %>% column_to_rownames(var = "ensembl_gene_id")
 
 
@@ -63,8 +63,8 @@ raw_counts_filt <- raw_counts[keep,]
 # CLASS 3
 
 ```{r}
-FC_counts <- read_delim("Data/targeted_counts.txt") %>% column_to_rownames(var="ensembl_gene_id")
-ann <- read_csv("./Data/Target_ann.csv")
+FC_counts <- read_delim("../data/targeted_counts.txt") %>% column_to_rownames(var="ensembl_gene_id")
+ann <- read_csv("../data/Target_ann.csv")
 ann_uhrr_C3 <- ann %>% dplyr::filter(str_detect(ann$Condition, "UHRR_C3"))
 
 C3_counts <- FC_counts %>% select(ann_uhrr_C3$SampleID)
@@ -121,8 +121,8 @@ plot_data <- data.frame(
 # CLASS 4
 
 ```{r}
-FC_counts <- read_delim("Data/Target_counts_UHRR_IMR32.txt") %>% column_to_rownames(var="ensembl_gene_id")
-ann <- read_csv("Data/Target_ann.csv")
+FC_counts <- read_delim("../data/targeted_counts.txt") %>% column_to_rownames(var="ensembl_gene_id")
+ann <- read_csv("../data/Target_ann.csv")
 ann_uhrr_C4 <- ann %>% dplyr::filter(str_detect(ann$Condition, "UHRR_C4"))
 
 C4_counts <- FC_counts %>% select(ann_uhrr_C4$SampleID)
@@ -229,7 +229,7 @@ pltv2
 
 ```{r}
 #loading raw counts, and targeted counts
-raw_counts <- read_delim("Data/merged_gene_counts_RP_IMR32_raw.txt")
+raw_counts <- read_delim("../data/IMR32_RP_counts.txt")
 colnames(raw_counts)[1]<-"ensembl_gene_id"
 sample_names<-colnames(raw_counts)[2:ncol(raw_counts)]
 sample_names<-str_extract(sample_names, "RNA\\d+")
@@ -255,7 +255,7 @@ raw_counts_filt <- raw_counts[keep,]
 
 ## C3 pool
 ```{r}
-FC_counts <- read_delim("Data/Target_counts_UHRR_IMR32.txt") %>% column_to_rownames(var="ensembl_gene_id")
+FC_counts <- read_delim("../data/targeted_counts.txt") %>% column_to_rownames(var="ensembl_gene_id")
 ann <- read_csv("Data/Target_ann.csv")
 ann_uhrr_C3 <- ann %>% dplyr::filter(str_detect(ann$Condition, "IMR32_C3"))
 
@@ -378,7 +378,7 @@ plot_data_C4 <- data.frame(
 
 ```{r}
 plot_data_full<-rbind(plot_data, plot_data_C4)
-#write_csv(plot_data_full, "Data/results/rlog_IMR32.csv")
+#write_csv(plot_data_full, "../results/rlog_IMR32.csv")
 # Compute correlations between Rp and targeted
 pearson_cor_imr = cor(plot_data_full$Targeted, plot_data_full$Random, method = "pearson")
 spearman_cor_imr = cor(plot_data_full$Targeted, plot_data_full$Random, method = "spearman")
@@ -436,6 +436,6 @@ combined_plot
 
 ```
 ```{r}
-ggsave("Data/results/v2/rlog_corr_UHRR_IMR32.png", combined_plot, dpi=300, width = 8, height = 4)
+#ggsave("../results/figures/rlog_corr_UHRR_IMR32.png", combined_plot, dpi=300, width = 8, height = 4)
 ```
 

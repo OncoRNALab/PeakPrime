@@ -36,21 +36,21 @@ color_panel <- c("steelblue", "#e35d6a","darkgray")
 # Loading targeted annotation
 ```{r}
 #loading and making annotation
-ann <- read_csv("Data/Target_ann.csv")
+ann <- read_csv("../data/Target_ann.csv")
 #annotation
 ann_targeted_filt <-ann %>% dplyr::filter(RNA_source%in%c("UHRR","IMR32")) %>% dplyr::select(c("SampleID", "Condition", "Concentration", "RNA_source", "Class", ))
 #Loading target gene ids
-C3_new<- read_csv("Data/results/C3pool_primers.csv")
-C4_new<- read_csv("Data/results/C4pool_primers.csv")
+C3_new<- read_csv("../data/C3pool_primers.csv")
+C4_new<- read_csv("../data/C4pool_primers.csv")
 ```
 
 # Whole Transcriptome
 
 ```{r}
 #loading raw UHRR counts
-UHRR_counts <- read_delim("Data/UHRR_counts.txt")
+UHRR_counts <- read_delim("../data/UHRR_RP_counts.txt")
 #loading raw IMR32 counts
-IMR32_RP <- read_delim("Data/merged_gene_counts_RP_IMR32_raw.txt")
+IMR32_RP <- read_delim("../data/IMR32_RP_counts.txt")
 colnames(IMR32_RP)[1]<-"ensembl_gene_id"
 sample_names<-colnames(IMR32_RP)[2:ncol(IMR32_RP)]
 sample_names<-str_extract(sample_names, "RNA\\d+")
@@ -110,7 +110,7 @@ resOrdered_RP_shrunk <- as.data.frame(res_shrunk_RP) %>%
 ## Pool C3
 
 ```{r}
-FC_counts <- read_delim("Data/Target_counts_UHRR_IMR32.txt") %>% column_to_rownames(var="ensembl_gene_id")
+FC_counts <- read_delim("../data/targeted_counts.txt") %>% column_to_rownames(var="ensembl_gene_id")
 samples_to_retain <- ann_targeted_filt$SampleID[ann_targeted_filt$Condition%in% c("UHRR_C3_1nM", "IMR32_C3_1nM")]
 
 FC_counts_filt<- FC_counts %>% select(c(samples_to_retain))
@@ -154,7 +154,7 @@ plot_data_C3 <- data.frame(Targeted = resOrdered_target_C3$log2FoldChange, Rando
 ## Pool C4
 
 ```{r}
-FC_counts <- read_delim("Data/Target_counts_UHRR_IMR32.txt") %>% column_to_rownames(var="ensembl_gene_id")
+FC_counts <- read_delim("../data/targeted_counts.txt") %>% column_to_rownames(var="ensembl_gene_id")
 samples_to_retain <- ann_targeted_filt$SampleID[ann_targeted_filt$Condition%in% c("UHRR_C4_1nM", "IMR32_C4_1nM")]
 
 FC_counts_filt<- FC_counts %>% select(c(samples_to_retain))
@@ -301,8 +301,8 @@ pltv2 <- ggplot(plot_data_full, aes(x = Targeted, y = Random)) +
 
 pltv2
 
-ggsave("Data/results/v2/logFC_UHRR_IMR32_label.png", pltv2, dpi=300, width = 8, height = 6)
-ggsave("Data/results/v2/logFC_UHRR_IMR32_label.pdf", pltv2, dpi=300, width = 8, height = 6)
+#ggsave("../data/results/figures/logFC_UHRR_IMR32_label.png", pltv2, dpi=300, width = 8, height = 6)
+#ggsave("../data/results/figures/logFC_UHRR_IMR32_label.pdf", pltv2, dpi=300, width = 8, height = 6)
 ```
 
 
@@ -416,7 +416,7 @@ p2.bar <- plot_data_bar %>% ggplot(aes(x = ensembl_gene_id, y = FC, fill = varia
 
 
 p2.bar
-#ggsave("Data/results/Bar_logFC_UHRR_IMR32_C4.png", p2.bar, dpi=300, width = 8, height = 6)
+#ggsave("../data/results/figures/Bar_logFC_UHRR_IMR32_C4.png", p2.bar, dpi=300, width = 8, height = 6)
 ```
 
 
