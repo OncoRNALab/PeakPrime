@@ -76,19 +76,19 @@ names(sequences) <- headers
 writeXStringSet(sequences, filepath = opt$out_fasta)
 
 cat("FASTA file written:", opt$out_fasta, "\n")
-cat("Ready for transcriptome alignment with bowtie2\n")
+cat("Ready for transcriptome alignment with bowtie\n")
 
 # Print summary
 strand_summary <- table(primers$gene_strand, primers$primer_type)
 cat("\nPrimer summary:\n")
 print(strand_summary)
 
-# Print example command for bowtie2 alignment
-cat("\nExample bowtie2 alignment command:\n")
+# Print example command for bowtie1 alignment
+cat("\nExample bowtie alignment command:\n")
 cat("# First, build transcriptome index (if not already done):\n")
-cat("# bowtie2-build transcriptome.fa transcriptome_idx\n\n")
+cat("# bowtie-build transcriptome.fa transcriptome_idx\n\n")
 cat("# Then align primers:\n")
-cat("bowtie2 -x transcriptome_idx -f -U", opt$out_fasta, "-S primers_alignment.sam --very-sensitive-local -k 10\n\n")
+cat("bowtie -x transcriptome_idx -f", opt$out_fasta, "-S primers_alignment.sam -a -n 3 -v 3 -l 15 --best\n\n")
 cat("# Convert to sorted BAM for analysis:\n")
 cat("samtools view -bS primers_alignment.sam | samtools sort -o primers_alignment.bam\n")
 cat("samtools index primers_alignment.bam\n")

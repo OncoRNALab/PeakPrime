@@ -145,7 +145,7 @@ Critical innovation for cDNA compatibility:
 
 **Implementation**:
 1. Convert designed primers to FASTA format
-2. Align primers to reference transcriptome using Bowtie2
+2. Align primers to reference transcriptome using Bowtie1
 3. Analyze alignment results for specificity classification
 4. Generate detailed reports on primer quality
 
@@ -245,8 +245,8 @@ PRIMER_MAX_TM=63.0
 - Alternative to BSgenome for custom genomes
 
 #### 3.2.2 Transcriptome QC Files
-**Bowtie2 Index** (`--transcriptome_index`):
-- Pre-built Bowtie2 index for reference transcriptome
+**Bowtie1 Index** (`--transcriptome_index`):
+- Pre-built Bowtie1 index for reference transcriptome
 - Used for primer specificity assessment
 
 **Transcriptome FASTA** (`--transcriptome_fasta`):
@@ -374,7 +374,7 @@ ATCGATCGATCGATCGATCGATCGATCGATCG...
 
 #### 4.4.1 Transcriptome Alignment Files
 **`primers_for_alignment.fa`**: Primer sequences in FASTA format
-**`primers_alignment.bam`**: Bowtie2 alignment results
+**`primers_alignment.bam`**: Bowtie1 alignment results
 **`primer_alignment_report.tsv`**: Specificity classification per primer
 **`primer_alignment_summary.tsv`**: Detailed alignment statistics
 
@@ -429,7 +429,7 @@ PeakPrime is implemented as a Nextflow DSL2 pipeline with modular architecture:
 - **MACS2**: 2.2.7.1 for peak calling
 - **R/Bioconductor**: Genomic analysis packages
 - **Primer3**: Primer design
-- **Bowtie2**: Optional transcriptome alignment
+- **Bowtie1**: Optional transcriptome alignment
 - **megaDepth**: BigWig generation
 
 #### 5.2.2 Resource Requirements

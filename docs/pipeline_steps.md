@@ -49,10 +49,10 @@ This document describes the main steps performed by the PeakPrime Nextflow pipel
 
 ### 6) Primer alignment (specificity check)
 - **What**: Align designed primers back to the transcriptome/genome to check for off-targets and mismatches.
-- **Tools**: Bowtie, Bowtie2, or `blastn` (for sensitive checks)
+- **Tools**: Bowtie1 or `blastn` (for sensitive checks)
 - **Key outputs**: Raw alignment files (SAM/BAM format), per-sample or combined alignment TSVs
-- **Example**: `bowtie -f -v 2 -a -p 4 transcriptome_index primers.fasta > primers.alignments.sam`
-- **Notes**: Index and align against the same reference used for genome coordinates. Use `-v 2` to allow up to 2 mismatches. This step is critical for identifying off-target binding.
+- **Example**: `bowtie -f -v 3 -n 3 -l 15 -a --best transcriptome_index primers.fasta -S primers.alignments.sam`
+- **Notes**: Index and align against the same reference used for genome coordinates. Use `-v 3 -n 3` to allow up to 3 mismatches in seed and total. Bowtie1 is preferred over Bowtie2 for primer checking as it allows mismatches in the seed region. This step is critical for identifying off-target binding.
 
 ### 7) Alignment summary & metrics
 - **What**: Summarize alignments to provide stats like number of perfect matches, off-target counts, and mapping positions.

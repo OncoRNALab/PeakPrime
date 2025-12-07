@@ -45,7 +45,7 @@ PeakPrime is a Nextflow pipeline that uses **MACS2 peak calling** to identify hi
 - **MACS2-aware quality control**: Integrates peak scores, q-values, and exonic overlap metrics
 - **Strand-specific primer design**: Ensures primers are appropriate for cDNA amplification
 - **Comprehensive visualization**: Coverage plots with peak overlays and all-peaks visualization
-- **Optional transcriptome QC**: Bowtie2-based specificity checks to detect cross-reactivity
+- **Optional transcriptome QC**: Bowtie1-based specificity checks to detect cross-reactivity
 
 ## 🚀 Pipeline Overview
 
@@ -284,12 +284,12 @@ macs2 callpeak -t file.bam -g hs --bdg --keep-dup auto -q 0.05 --nomodel --extsi
 ### Transcriptome Alignment QC (Optional)
 | Parameter | Description |
 |-----------|-------------|
-| `--transcriptome_index` | Bowtie2 transcriptome index prefix |
+| `--transcriptome_index` | Bowtie1 transcriptome index prefix |
 | `--transcriptome_fasta` | Transcriptome FASTA for gene mapping |
 | `--max_primers_per_gene` | Maximum primers per gene for QC (default: 20) |
 | `--distance_threshold` | Maximum distance from 3' end for alignments (bp, default: 400) |
 | `--max_mismatches` | Maximum mismatches for primer specificity check (0-3, default: 0) |
-| `--bowtie2_seed_length` | Bowtie2 seed length for alignment (bp, default: 10) |
+| `--bowtie_seed_length` | Bowtie1 seed length for alignment (bp, default: 15) |
 
 #### Understanding Primer Specificity Filtering
 
@@ -299,7 +299,7 @@ The `--max_mismatches` parameter controls how strictly primers are evaluated for
 
 - **`--max_mismatches 2-3` (recommended)**: Detects primers that have near-perfect matches (≤2-3 mismatches) to off-target genes. This provides more realistic specificity assessment, as primers with just a few mismatches can still cross-react and amplify unintended targets. **Recommended for production use** to avoid false negatives.
 
-**How it works**: The pipeline aligns primers to the transcriptome using Bowtie2 and applies a 3-stage filter:
+**How it works**: The pipeline aligns primers to the transcriptome using Bowtie1 and applies a 3-stage filter:
 1. **Stage 1** (Mismatch filter): Keep only alignments with ≤`max_mismatches` mismatches
 2. **Stage 2** (Distance filter): Among those, keep alignments within `distance_threshold` bp of 3' end
 3. **Stage 3** (Specificity filter): Flag primers that align to multiple genes (non-specific)
@@ -362,7 +362,7 @@ nextflow run main.nf --max_mismatches 2 --distance_threshold 400 ...
 
 ### Transcriptome QC Outputs (if enabled)
 - `primers_for_alignment.fa`: Primer sequences for alignment
-- `primers_alignment.bam`: Bowtie2 alignment results
+- `primers_alignment.bam`: Bowtie1 alignment results
 - `primer_alignment_report.tsv`: Specificity classification per primer
 - `primer_alignment_summary.tsv`: Detailed alignment information
 

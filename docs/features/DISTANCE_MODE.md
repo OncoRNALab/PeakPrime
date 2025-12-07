@@ -71,7 +71,7 @@ nextflow run main.nf \
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `--transcriptome_index` | Bowtie2 index for primer specificity checking | null |
+| `--transcriptome_index` | Bowtie1 index for primer specificity checking | null |
 | `--primer3_settings` | Primer3 configuration file | `config/primer3_settings.txt` |
 | `--outdir` | Output directory | `results` |
 
@@ -152,7 +152,7 @@ Run Primer3 with the extracted templates using the same configuration as the pea
 
 ### Step 4: Specificity Check (Optional)
 
-If `--transcriptome_index` is provided, align primers to the transcriptome using Bowtie2 to check for off-target binding.
+If `--transcriptome_index` is provided, align primers to the transcriptome using Bowtie1 to check for off-target binding.
 
 ## Example Workflows
 
