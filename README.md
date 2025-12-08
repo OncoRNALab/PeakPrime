@@ -154,7 +154,7 @@ nextflow run main.nf \
   -profile local
 ```
 
-**📖 For detailed documentation on distance-based mode, see [docs/DISTANCE_BASED_PRIMER_DESIGN.md](docs/DISTANCE_BASED_PRIMER_DESIGN.md)**
+**📖 For detailed documentation on distance-based mode, see [docs/features/DISTANCE_MODE.md](docs/features/DISTANCE_MODE.md)**
 
 ### With Custom MACS2 Parameters (Peak-Based Mode)
 ```bash
