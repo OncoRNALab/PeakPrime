@@ -355,7 +355,7 @@ Example output:
 
 ```bash
 # Count generated plots
-ls -1 results/plots/*.png | wc -l
+ls -1 results/plots/*.pdf | wc -l
 
 # Should match number of genes
 wc -l < genes.txt
@@ -414,7 +414,7 @@ if (params.makeplots) {
   gene_plot_ch = genes_list_ch.splitText()
     .map { it.trim() }
     .filter { it }
-    .map { gene_id -> tuple(gene_id, "plot_${gene_id}.png") }
+    .map { gene_id -> tuple(gene_id, "plot_${gene_id}.pdf") }
   
   // Combine with all inputs
   plot_inputs = gene_plot_ch
@@ -443,7 +443,7 @@ workflow makeplots {
     .splitText()
     .map { it.trim() }
     .filter { it }
-    .map { gene_id -> tuple(gene_id, "plot_${gene_id}.png") }
+    .map { gene_id -> tuple(gene_id, "plot_${gene_id}.pdf") }
   
   plot_inputs = gene_plot_ch
     .combine(Channel.fromPath(params.bw))

@@ -578,7 +578,7 @@ opt_list <- list(
   make_option("--qc", type="character", default="qc_coverage_summary.tsv", help="QC table (optional) [default %default]"),
   make_option("--primer", type="character", default=NULL, help="Primer BED (optional)"),
   make_option("--narrowpeak", type="character", default=NULL, help="MACS2 narrowPeak file to show all peaks (optional)"),
-  make_option("--out", type="character", default=NULL, help="Output image path (PNG/PDF). If omitted, uses plot_<gene>.png"),
+  make_option("--out", type="character", default=NULL, help="Output image path (PNG/PDF). If omitted, uses plot_<gene>.pdf"),
   make_option("--yaxis", type="character", default="percent",
               help="Y-axis mode: 'percent' (relative to TRUE BigWig peak), 'depth' (raw), or 'log10' (raw log10) [default %default]"),
   make_option("--max_isoforms", type="integer", default=Inf, help="Limit number of isoforms for readability (default: all)"),
@@ -605,7 +605,7 @@ plt <- plot_gene_with_window(
   cov_target_points= as.integer(opt$cov_points)
 )
 
-outfile <- if (!is.null(opt$out)) opt$out else sprintf("plot_%s.png", opt$gene)
+outfile <- if (!is.null(opt$out)) opt$out else sprintf("plot_%s.pdf", opt$gene)
 ext <- tolower(tools::file_ext(outfile))
 
 if (inherits(plt, "list")) {

@@ -314,7 +314,7 @@ The pipeline produces a sequence of intermediate files enabling modular executio
 6. **Alignment → Analysis**: `primers_alignment.bam` → `primer_alignment_report.tsv`, `primer_alignment_summary.tsv`
 7. **Analysis → Selection**: `best_primers.tsv`
 8. **Selection → Optimization**: `best_primers_optimal.tsv` (single-peak) or `optimized_primers_multipeak.tsv` (multi-peak)
-9. **All stages → Visualization**: `plot_<gene_id>.png`
+9. **All stages → Visualization**: `plot_<gene_id>.pdf`
 
 **Data Flow Diagram**:
 
@@ -346,7 +346,7 @@ BAM + GTF + Genes
 [SUMMARIZE_RESULTS] → pipeline_summary.txt
 
 Parallel branch (if --makeplots):
-BAM → [MEGADEPTH_BW] → coverage.bw → [MAKEPLOTS_NEW] → plot_*.png
+BAM → [MEGADEPTH_BW] → coverage.bw → [MAKEPLOTS_NEW] → plot_*.pdf
 ```
 
 ## 7. External Dependencies
@@ -395,7 +395,7 @@ BAM → [MEGADEPTH_BW] → coverage.bw → [MAKEPLOTS_NEW] → plot_*.png
 | `best_primers_optimal.tsv` | TSV | Isoform-optimized primers (single-peak mode): gene_id, primer_index, isoforms_targeted, target_transcripts | Experimental design | 5–50 KB |
 | `optimized_primers_multipeak.tsv` | TSV | Multi-peak optimized primers: gene_id, primer_id, peak_id, distance_to_3prime, isoforms_targeted, peak_rank, composite_score | Experimental design | 10–100 KB |
 | `*.bam.bw` | BigWig | Normalized coverage tracks: per-base coverage across genome | Visualization | 50–200 MB |
-| `plot_<gene_id>.png` | PNG | Coverage plot with gene structure, peaks, primers: 1200×800 px | Publication, QC review | 200–500 KB each |
+| `plot_<gene_id>.pdf` | PDF | Coverage plot with gene structure, peaks, primers: vector scalable | Publication, QC review | 50–200 KB each |
 | `pipeline_summary.txt` | Text | Execution summary: gene counts, success/failure tallies, parameter settings | Run documentation | 1–5 KB |
 
 **Typical Output Ranges**:
@@ -611,8 +611,8 @@ results_optimized/
 ├── best_primers.tsv                          (28 KB, 872 primers)
 ├── best_primers_optimal.tsv                  (31 KB, 872 primers with isoforms)
 ├── sample_RNA_seq.bam.bw                     (147 MB, coverage track)
-├── plot_ENSG00000000001.png                  (423 KB)
-├── plot_ENSG00000000002.png                  (387 KB)
+├── plot_ENSG00000000001.pdf                  (120 KB)
+├── plot_ENSG00000000002.pdf                  (95 KB)
 ├── ...                                       (872 plots total)
 └── pipeline_summary.txt                      (2 KB, execution summary)
 ```

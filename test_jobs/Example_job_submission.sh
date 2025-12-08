@@ -27,18 +27,18 @@ nextflow run main.nf --makeplots \
   --outdir ./results \
   -profile pbs # to use the slurm scheduler of the HPC
 
- nextflow run main.nf \
-  --bam testdata/RNA034671_S13_L001_dedup.bam \
+ nextflow run main.nf --makeplots \
+  --bam /scratch/gent/vo/000/gvo00027/projects/BSL/InHouse_whole_transcript_IMR32/RNA033258_S1_L001_dedup_10M.bam \
   --fasta /data/gent/vo/000/gvo00027/resources/Ensembl_genomes/Homo_sapiens/GRCh38/Homo_sapiens.GRCh38.dna.primary_assembly.chrIS_spikes_45S.fa \
   --gtf /data/gent/vo/000/gvo00027/resources/Ensembl_transcriptomes/Homo_sapiens/GRCh38/Homo_sapiens.GRCh38.109.chrIS_spikes_45S.gtf \
   --genes testdata/geneids.txt \
   --macs2_qvalue_threshold 0.1 \
-  --select_all_peaks --optimize_multipeak \
+  --peak_rank 1 \
   --macs2_extsize 150 \
   --macs2_shift 0 \
   --transcriptome_index /data/gent/vo/000/gvo00027/resources/Bowtie2_index/Homo_sapiens/Transcriptome_Homo_sapiens.GRCh38.109.chrIS_spikes_45S/bowtie2_index \
   --transcriptome_fasta /data/gent/vo/000/gvo00027/resources/Ensembl_transcriptomes/Homo_sapiens/GRCh38/Homo_sapiens.GRCh38.109.chrIS_spikes_45S.fa \
-  --outdir ./resultsC3/ \
+  --outdir ./resultsC3_peak1/ \
   -profile local
 
 

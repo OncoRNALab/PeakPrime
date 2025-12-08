@@ -74,9 +74,9 @@ plt.title('Number of Primers per Gene After Each Pipeline Step')
 plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
 plt.tight_layout()
 plt.gca().yaxis.set_major_locator(plt.MaxNLocator(integer=True))
-plt.savefig(os.path.join(outdir, 'primer_counts_per_gene.png'))
+plt.savefig(os.path.join(outdir, 'primer_counts_per_gene.pdf'))
 plt.close()
-print(f"Wrote {os.path.join(outdir, 'primer_counts_per_gene.png')}")
+print(f"Wrote {os.path.join(outdir, 'primer_counts_per_gene.pdf')}")
 
 # Write summary TSV
 tsv_out = os.path.join(outdir, 'primer_counts_per_gene.tsv')

@@ -406,31 +406,28 @@ python bin/summarize_pipeline_results.py results/your_output_directory/
 
 ### Interactive Exploration with Shiny App
 
-PeakPrime includes an interactive Shiny application for exploring results:
+PeakPrime includes a powerful standalone Shiny application for exploring and visualizing pipeline results:
 
 ```bash
-# Navigate to your results directory
-cd results/your_output_directory/
+# Step 1: Preprocess your results (required once)
+Rscript preprocess_for_standalone.R results/your_output_directory
 
-# Copy the Shiny app
-cp ../../app.R .
-
-# Launch the interactive explorer (in R)
-R
-> shiny::runApp("app.R")
-
-# Or from command line (requires shiny package)
-Rscript -e "shiny::runApp('app.R')"
+# Step 2: Launch the interactive explorer
+Rscript app_standalone.R results/your_output_directory
 ```
 
-**Features of the Interactive Explorer:**
-- **Automatic file discovery**: Finds all required PeakPrime output files
-- **Gene filtering**: View only genes with selected peaks or browse all genes
-- **Interactive plotting**: Customize y-axis scaling, primer display, and isoform limits
-- **QC summary tables**: View detailed quality control metrics for each gene
-- **Real-time updates**: Changes to plot settings update the visualization instantly
+**Key Features:**
+- ⚡ **Ultra-fast loading**: 2-3 second startup with optimized data structures
+- 🔬 **Multi-peak visualization**: View all detected MACS2 peaks, not just the selected one
+- 🧬 **Multi-isoform support**: Display all transcript variants with strand-aware primers
+- 🎛️ **Interactive controls**: Customize y-axis scaling, primer display, peak counts, and more
+- 📊 **Comprehensive QC tables**: Detailed quality metrics for each gene
 
-**Required R packages**: `shiny`, `DT`, `rtracklayer`, `data.table`, `ggplot2`, `GenomicRanges`, `IRanges`, `GenomicFeatures`, `grid`
+**📖 Complete Documentation:**
+- **[Standalone App Guide](docs/STANDALONE_GUIDE.md)** - Complete setup and usage instructions
+- **[HPC RStudio Guide](docs/HPC_RSTUDIO_GUIDE.md)** - Running the app on UGent HPC web portal
+
+The standalone app provides publication-ready visualizations and interactive exploration capabilities far beyond static plot generation.
 
 #### Sample Plot Output
 ![Example Gene Visualization](plot_ENSG00000096384.png)

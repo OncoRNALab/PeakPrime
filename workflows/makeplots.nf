@@ -27,7 +27,7 @@ workflow makeplots {
     .map { it.trim() }
     .filter { it }
     .map { gene_id ->
-      def out_name = "plot_${gene_id}.png"
+      def out_name = "plot_${gene_id}.pdf"
       tuple(gene_id, out_name)
     }
 

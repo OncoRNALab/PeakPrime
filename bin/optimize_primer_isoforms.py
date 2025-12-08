@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""
 """Optimize primer selection to maximize distinct isoform coverage.
 
 Reads best_primers.tsv and primer_alignment_summary.tsv, then selects

@@ -182,18 +182,6 @@ nextflow run main.nf \
   --outdir results_distance_qc
 ```
 
-### Example 3: Comparing Different Template Lengths
-
-```bash
-# Test different template lengths
-for length in 200 300 400 500; do
-  nextflow run main.nf \
-    --distance_mode \
-    --genes genes.txt \
-    --template_length ${length} \
-    --outdir results_distance_${length}bp
-done
-```
 
 ## Comparison: Distance-Based vs Peak-Based
 

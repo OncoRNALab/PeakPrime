@@ -384,8 +384,8 @@ ATCGATCGATCGATCGATCGATCGATCGATCG...
 
 ### 4.5 Visualization Outputs (`--makeplots`)
 
-#### 4.5.1 Coverage Plots (`plot_<gene_id>.png`)
-**Format**: PNG images
+#### 4.5.1 Coverage Plots (`plot_<gene_id>.pdf`)
+**Format**: PDF vector images
 **Content**: Multi-panel plots showing:
 
 **Top Panel - Coverage**:

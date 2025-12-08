@@ -8,8 +8,7 @@ trace.txt
 dag.dot
 
 # Results and output directories
-results/
-results_*/
+results*/
 output/
 outputs/
 bin/BinSize_check.R

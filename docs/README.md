@@ -36,6 +36,10 @@ Design primers at fixed distance from 3' end:
 - **[Peak Ranking](features/PEAK_RANKING.md)** - Understand how peaks are ranked and selected
 - **[Plotting Optimization](features/PLOTTING_OPTIMIZATION.md)** - Fast parallel visualization (40× speedup)
 
+### Interactive Visualization
+- **[Standalone App Guide](STANDALONE_GUIDE.md)** - Interactive Shiny app for exploring results
+- **[HPC RStudio Guide](HPC_RSTUDIO_GUIDE.md)** - Running the app on UGent HPC web portal
+
 ---
 
 ## 🚀 Quick Start Examples
@@ -97,6 +101,8 @@ nextflow run main.nf \
 |----------|-------------|
 | [Isoform Optimization](features/ISOFORM_OPTIMIZATION.md) | Optimize primer selection for maximum isoform coverage |
 | [Plotting Optimization](features/PLOTTING_OPTIMIZATION.md) | Fast parallel plotting (40× speedup) |
+| [Standalone App Guide](STANDALONE_GUIDE.md) | Interactive Shiny app for exploring and visualizing results |
+| [HPC RStudio Guide](HPC_RSTUDIO_GUIDE.md) | Running the standalone app on UGent HPC RStudio Server |
 
 ### Technical Reference
 | Document | Description |
@@ -171,7 +177,7 @@ results/
 ├── best_primers.tsv           # Best primer per gene
 ├── best_primers_optimal.tsv   # Isoform-optimized primers (optional)
 ├── plots/                     # Visualization plots (if --makeplots)
-│   └── plot_ENSG*.png
+│   └── plot_ENSG*.pdf
 ├── macs2_peaks/               # Peak calling results
 │   └── *_peaks.narrowPeak
 └── primer3_output/            # Primer3 results
@@ -265,6 +271,8 @@ docs/
 ├── pipeline_steps.md            # Pipeline overview
 ├── TECHNICAL_APPENDIX.md        # Technical specifications
 ├── REPRODUCIBILITY_GUIDE.md     # Setup guide
+├── STANDALONE_GUIDE.md          # Interactive Shiny app guide
+├── HPC_RSTUDIO_GUIDE.md         # HPC RStudio Server guide
 │
 ├── features/
 │   ├── PEAK_RANKING.md          # Peak ranking explained
