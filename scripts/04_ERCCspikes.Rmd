@@ -24,14 +24,37 @@ qpcr_res
 
 
 ```{r}
+# Text label for correlations
+# pearson_cor <- cor(qpcr_res$Cq, qpcr_res$log2_concentration, method = "pearson")
+# spearman_cor <- cor(qpcr_res$Cq, qpcr_res$log2_concentration, method = "spearman")
+
+
+pearson_test <- cor.test(qpcr_res$Cq,
+                         qpcr_res$log2_concentration,
+                         method = "pearson")
+
+spearman_test <- cor.test(qpcr_res$Cq,
+                         qpcr_res$log2_concentration,
+                         method = "spearman")
+
+pearson_cor <- pearson_test$estimate
+pearson_pval <- pearson_test$p.value
+
+spearman_cor <- spearman_test$estimate
+spearman_pval <- spearman_test$p.value
+
+```
+
+```{r}
 lims <- range(c(qpcr_res$Cq, qpcr_res$log2_concentration), na.rm = TRUE)
 
-# Text label for correlations
-pearson_cor <- cor(qpcr_res$Cq, qpcr_res$log2_concentration, method = "pearson")
-spearman_cor <- cor(qpcr_res$Cq, qpcr_res$log2_concentration, method = "spearman")
-
-corr_label <- sprintf("Pearson r= %.2f\nSpearman r=%.2f",
-                      pearson_cor, spearman_cor)
+# corr_label <- sprintf("Pearson r= %.2f\nSpearman r=%.2f",
+#                       pearson_cor, spearman_cor)
+corr_label <- sprintf(
+  "Pearson:  %.2f  p = %.2e\nSpearman: %.2f  p = %.2e",
+  pearson_cor, pearson_pval,
+  spearman_cor, spearman_pval
+)
 
 pltv3<-ggplot(qpcr_res, aes(x = log2_concentration, y = Cq)) +
 geom_point() +

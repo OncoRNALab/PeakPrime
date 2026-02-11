@@ -110,9 +110,8 @@ resOrdered_RP_shrunk <- as.data.frame(res_shrunk_RP) %>%
 ## Pool C3
 
 ```{r}
-FC_counts <- read_delim("../data/targeted_counts.txt") %>% column_to_rownames(var="ensembl_gene_id")
+FC_counts <- read.csv("../data/targeted_counts.csv", row.names = 1, check.names = FALSE)
 samples_to_retain <- ann_targeted_filt$SampleID[ann_targeted_filt$Condition%in% c("UHRR_C3_1nM", "IMR32_C3_1nM")]
-
 FC_counts_filt<- FC_counts %>% select(c(samples_to_retain))
 class_coldata <- ann_targeted_filt[ann_targeted_filt$SampleID %in% samples_to_retain,]
 class_coldata$Concentration <- base::as.factor(class_coldata$Concentration)
@@ -148,16 +147,16 @@ pearson<- cor(resOrdered_target_C3$log2FoldChange, resOrdered_RP_C3$log2FoldChan
 spearman<- cor(resOrdered_target_C3$log2FoldChange, resOrdered_RP_C3$log2FoldChange, method = "spearman")
 
 plot_data_C3 <- data.frame(Targeted = resOrdered_target_C3$log2FoldChange, Random = resOrdered_RP_C3$log2FoldChange, pool=c(rep("P3", nrow(resOrdered_target_C3))), row.names = rownames(resOrdered_RP_C3))
-#write.csv(plot_data_C3, "Data/results/LOG2FC_C3.csv")
+#write.csv(plot_data_C3, "../results/LOG2FC_C3.csv")
 ```
 
 ## Pool C4
 
 ```{r}
-FC_counts <- read_delim("../data/targeted_counts.txt") %>% column_to_rownames(var="ensembl_gene_id")
+FC_counts <- read.csv("../data/targeted_counts.csv", row.names = 1, check.names = FALSE)
 samples_to_retain <- ann_targeted_filt$SampleID[ann_targeted_filt$Condition%in% c("UHRR_C4_1nM", "IMR32_C4_1nM")]
-
 FC_counts_filt<- FC_counts %>% select(c(samples_to_retain))
+
 class_coldata <- ann_targeted_filt[ann_targeted_filt$SampleID %in% samples_to_retain,]
 class_coldata$Concentration <- base::as.factor(class_coldata$Concentration)
 class_coldata$RNA_source <- base::as.factor(class_coldata$RNA_source)
@@ -192,24 +191,44 @@ pearson<- cor(resOrdered_target_C3$log2FoldChange, resOrdered_RP_C3$log2FoldChan
 spearman<- cor(resOrdered_target_C3$log2FoldChange, resOrdered_RP_C3$log2FoldChange, method = "spearman")
 
 plot_data_C4 <- data.frame(Targeted = resOrdered_target_C3$log2FoldChange, Random = resOrdered_RP_C3$log2FoldChange, pool=c(rep("P4", nrow(resOrdered_target_C3))), row.names = rownames(resOrdered_RP_C3))
-#write.csv(plot_data_C4, "Data/results/LOG2FC_C4.csv")
+#write.csv(plot_data_C4, "../results/LOG2FC_C4.csv")
 ```
 
 
 #Correlation
-
 ```{r}
 plot_data_full <- rbind(plot_data_C3, plot_data_C4)
 
-pearson_cor = cor(plot_data_full$Targeted, plot_data_full$Random, method = "pearson")
-spearman_cor = cor(plot_data_full$Targeted, plot_data_full$Random, method = "spearman")
+pearson_test <- cor.test(plot_data_full$Targeted,
+                         plot_data_full$Random,
+                         method = "pearson")
 
+spearman_test <- cor.test(plot_data_full$Targeted,
+                         plot_data_full$Random,
+                         method = "spearman")
+
+pearson_cor <- pearson_test$estimate
+pearson_pval <- pearson_test$p.value
+
+spearman_cor <- spearman_test$estimate
+spearman_pval <- spearman_test$p.value
+
+```
+
+
+```{r}
 # Make sure both axes use the same limits so the y = x line is meaningful
 lims <- range(c(plot_data_full$Targeted, plot_data_full$Random), na.rm = TRUE)
 
 # Text label for correlations
-corr_label <- sprintf("Pearson:  %.2f\nSpearman: %.2f",
-                      pearson_cor, spearman_cor)
+# corr_label <- sprintf("Pearson:  %.2f pval: %.2f\nSpearman: %.2f pval: %.2f",
+#                       pearson_cor, pearson_pval,spearman_cor, spearman_pval)
+
+corr_label <- sprintf(
+  "Pearson:  %.2f  p = %.2e\nSpearman: %.2f  p = %.2e",
+  pearson_cor, pearson_pval,
+  spearman_cor, spearman_pval
+)
 
 pltv2<-ggplot(plot_data_full, aes(x = Targeted, y = Random)) +
 geom_point(aes(colour = pool),alpha = 0.5, size = 1) +
@@ -260,13 +279,16 @@ plot_data_full$gene_id <- rownames(plot_data_full)
 # which genes to label?
 genes_to_label <- c("ENSG00000077279", "ENSG00000082641")  # <- put your two rownames here
 
-pearson_cor = cor(plot_data_full$Targeted, plot_data_full$Random, method = "pearson")
-spearman_cor = cor(plot_data_full$Targeted, plot_data_full$Random, method = "spearman")
+# pearson_cor = cor(plot_data_full$Targeted, plot_data_full$Random, method = "pearson")
+# spearman_cor = cor(plot_data_full$Targeted, plot_data_full$Random, method = "spearman")
 
 lims <- range(c(plot_data_full$Targeted, plot_data_full$Random), na.rm = TRUE)
 
-corr_label <- sprintf("Pearson:  %.2f\nSpearman: %.2f",
-                      pearson_cor, spearman_cor)
+corr_label <- sprintf(
+  "Pearson:  %.2f  p = %.2e\nSpearman: %.2f  p = %.2e",
+  pearson_cor, pearson_pval,
+  spearman_cor, spearman_pval
+)
 
 pltv2 <- ggplot(plot_data_full, aes(x = Targeted, y = Random)) +
   geom_point(aes(colour = pool), alpha = 0.5, size = 1) +
@@ -301,8 +323,8 @@ pltv2 <- ggplot(plot_data_full, aes(x = Targeted, y = Random)) +
 
 pltv2
 
-#ggsave("../data/results/figures/logFC_UHRR_IMR32_label.png", pltv2, dpi=300, width = 8, height = 6)
-#ggsave("../data/results/figures/logFC_UHRR_IMR32_label.pdf", pltv2, dpi=300, width = 8, height = 6)
+#ggsave("../results/figures/logFC_UHRR_IMR32_label.png", pltv2, dpi=300, width = 8, height = 6)
+#ggsave("../results/figures/Fig_4_pval.pdf", pltv2, dpi=500, width = 8, height = 6)
 ```
 
 
@@ -330,7 +352,7 @@ geom_point(aes(colour = pool),alpha = 0.5, size = 1) +
     geom_abline(intercept = 0, slope = 1, linetype = "dashed", 
                 color = "gray40", linewidth = 0.7)+
   labs(
-      x = "targeted log2fc",
+      x = "log2 fold change (targeted) targeted",
       y = "random log2fc"
     ) +
   annotate("text",

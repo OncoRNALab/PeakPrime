@@ -70,13 +70,14 @@ imr32_included_primers_C4 <- base::intersect(rownames(IMR32_RP), C4_new$GeneID)
 
 ```{r}
 #loading targeted counts
-FC_counts<- read_delim("../data/targeted_counts.txt")
+FC_counts <- read.csv("../data/targeted_counts.csv", row.names = 1, check.names = FALSE)
+
 # UHRR and IMR3 Class3 
 
 sample_names <- ann$SampleID[str_detect(ann$Condition, "UHRR_C3_1nM|IMR32_C3_1nM")]
-Class3_counts <- FC_counts %>% column_to_rownames(var="ensembl_gene_id") %>% dplyr::select(sample_names) 
+Class3_counts <- FC_counts %>% dplyr::select(sample_names) 
 sample_names <- ann$SampleID[str_detect(ann$Condition, "UHRR_C4_1nM|IMR32_C4_1nM")]
-Class4_counts <- FC_counts %>% column_to_rownames(var="ensembl_gene_id") %>% dplyr::select(sample_names)
+Class4_counts <- FC_counts %>% dplyr::select(sample_names)
 
 #get CPM counts
 

@@ -64,6 +64,7 @@ raw_counts_filt <- raw_counts[keep,]
 
 ```{r}
 FC_counts <- read_delim("../data/targeted_counts.txt") %>% column_to_rownames(var="ensembl_gene_id")
+FC_counts <- read.csv("../data/targeted_counts.csv", row.names = 1, check.names = FALSE)
 ann <- read_csv("../data/Target_ann.csv")
 ann_uhrr_C3 <- ann %>% dplyr::filter(str_detect(ann$Condition, "UHRR_C3"))
 
@@ -121,7 +122,7 @@ plot_data <- data.frame(
 # CLASS 4
 
 ```{r}
-FC_counts <- read_delim("../data/targeted_counts.txt") %>% column_to_rownames(var="ensembl_gene_id")
+FC_counts <- read.csv("../data/targeted_counts.csv", row.names = 1, check.names = FALSE)
 ann <- read_csv("../data/Target_ann.csv")
 ann_uhrr_C4 <- ann %>% dplyr::filter(str_detect(ann$Condition, "UHRR_C4"))
 
@@ -184,8 +185,23 @@ plot_data_C4 <- data.frame(
 ```{r}
 plot_data_full<-rbind(plot_data, plot_data_C4)
 #write_csv(plot_data_full, "Data/results/rlog_UHRR.csv")
-pearson_cor = cor(plot_data_full$Targeted, plot_data_full$Random, method = "pearson")
-spearman_cor = cor(plot_data_full$Targeted, plot_data_full$Random, method = "spearman")
+# pearson_cor = cor(plot_data_full$Targeted, plot_data_full$Random, method = "pearson")
+# spearman_cor = cor(plot_data_full$Targeted, plot_data_full$Random, method = "spearman")
+
+pearson_test <- cor.test(plot_data_full$Targeted,
+                         plot_data_full$Random,
+                         method = "pearson")
+
+spearman_test <- cor.test(plot_data_full$Targeted,
+                         plot_data_full$Random,
+                         method = "spearman")
+
+pearson_cor <- pearson_test$estimate
+pearson_pval <- pearson_test$p.value
+
+spearman_cor <- spearman_test$estimate
+spearman_pval <- spearman_test$p.value
+
 ```
 
 ```{r}
@@ -193,8 +209,13 @@ spearman_cor = cor(plot_data_full$Targeted, plot_data_full$Random, method = "spe
 lims <- range(c(plot_data_full$Targeted, plot_data_full$Random), na.rm = TRUE)
 
 # Text label for correlations
-corr_label <- sprintf("pearson:  %.2f\nspearman: %.2f",
-                      pearson_cor, spearman_cor)
+# corr_label <- sprintf("pearson:  %.2f\nspearman: %.2f",
+#                       pearson_cor, spearman_cor)
+corr_label <- sprintf(
+  "Pearson:  %.2f  p = %.2e\nSpearman: %.2f  p = %.2e",
+  pearson_cor, pearson_pval,
+  spearman_cor, spearman_pval
+)
 
 pltv2<-ggplot(plot_data_full, aes(x = Targeted, y = Random)) +
 geom_point(aes(colour = pool),alpha = 0.5, size = 1) +
@@ -255,8 +276,8 @@ raw_counts_filt <- raw_counts[keep,]
 
 ## C3 pool
 ```{r}
-FC_counts <- read_delim("../data/targeted_counts.txt") %>% column_to_rownames(var="ensembl_gene_id")
-ann <- read_csv("Data/Target_ann.csv")
+FC_counts <- read.csv("../data/targeted_counts.csv", row.names = 1, check.names = FALSE)
+ann <- read_csv("../data/Target_ann.csv")
 ann_uhrr_C3 <- ann %>% dplyr::filter(str_detect(ann$Condition, "IMR32_C3"))
 
 C3_counts <- FC_counts %>% select(ann_uhrr_C3$SampleID)
@@ -380,8 +401,24 @@ plot_data_C4 <- data.frame(
 plot_data_full<-rbind(plot_data, plot_data_C4)
 #write_csv(plot_data_full, "../results/rlog_IMR32.csv")
 # Compute correlations between Rp and targeted
-pearson_cor_imr = cor(plot_data_full$Targeted, plot_data_full$Random, method = "pearson")
-spearman_cor_imr = cor(plot_data_full$Targeted, plot_data_full$Random, method = "spearman")
+# pearson_cor_imr = cor(plot_data_full$Targeted, plot_data_full$Random, method = "pearson")
+# spearman_cor_imr = cor(plot_data_full$Targeted, plot_data_full$Random, method = "spearman")
+
+
+pearson_test <- cor.test(plot_data_full$Targeted,
+                         plot_data_full$Random,
+                         method = "pearson")
+
+spearman_test <- cor.test(plot_data_full$Targeted,
+                         plot_data_full$Random,
+                         method = "spearman")
+
+pearson_cor_imr <- pearson_test$estimate
+pearson_pval_imr <- pearson_test$p.value
+
+spearman_cor_imr <- spearman_test$estimate
+spearman_pval_imr <- spearman_test$p.value
+
 ```
 
 ```{r}
@@ -389,8 +426,13 @@ spearman_cor_imr = cor(plot_data_full$Targeted, plot_data_full$Random, method = 
 lims <- range(c(plot_data_full$Targeted, plot_data_full$Random), na.rm = TRUE)
 
 # Text label for correlations
-corr_label <- sprintf("pearson:  %.2f\nspearman: %.2f",
-                      pearson_cor_imr, spearman_cor_imr)
+# corr_label <- sprintf("pearson:  %.2f\nspearman: %.2f",
+#                       pearson_cor_imr, spearman_cor_imr)
+corr_label <- sprintf(
+  "Pearson:  %.2f  p = %.2e\nSpearman: %.2f  p = %.2e",
+  pearson_cor_imr, pearson_pval_imr,
+  spearman_cor_imr, spearman_pval_imr
+)
 
 pltv3<-ggplot(plot_data_full, aes(x = Targeted, y = Random)) +
 geom_point(aes(colour = pool),alpha = 0.5, size = 1) +
