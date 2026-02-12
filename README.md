@@ -9,7 +9,11 @@
 
 PeakPrime is a Nextflow pipeline that uses **MACS2 peak calling** to identify high-coverage regions in (3' end) RNA-seq data and designs strand-specific cDNA primers with comprehensive quality control and visualization.
 
-## 📑 Table of Contents
+## � License
+
+This project is licensed under the [PolyForm Noncommercial License 1.0.0](LICENSE.md). This means you are free to use, modify, and distribute this software for noncommercial purposes only. See the [LICENSE.md](LICENSE.md) file for full terms.
+
+## �📑 Table of Contents
 
 - [Why PeakPrime?](#-why-peakprime)
 - [Pipeline Overview](#-pipeline-overview)
