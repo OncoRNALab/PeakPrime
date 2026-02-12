@@ -4,6 +4,10 @@
 > **Citation:** _[Citation Placeholder]_  \
 > **Contact:** _[Corresponding author / email placeholder]_
 
+## License
+
+This project is licensed under the [PolyForm Noncommercial License 1.0.0](LICENSE.md). This means you are free to use, modify, and distribute this software for noncommercial purposes only. See the [LICENSE.md](LICENSE.md) file for full terms.
+
 ## Purpose
 
 This branch provides the reference data, and intermediate outputs used to reproduce the analyses described in the publication above.
