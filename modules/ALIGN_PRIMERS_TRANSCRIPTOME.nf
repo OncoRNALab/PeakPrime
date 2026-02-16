@@ -21,10 +21,10 @@ process ALIGN_PRIMERS_TRANSCRIPTOME {
   # Optimized for ~20nt primers to detect 1-3 mismatches:
   # -l: Seed length (default 15bp allows mismatches outside seed region)
   # -n 3: Allow up to 3 mismatches in the seed region (bowtie1 advantage)
-  # -v 3: Allow up to 3 mismatches total across entire primer
+  # -v 4: Allow up to 4 mismatches total across entire primer
   # -a: Report all valid alignments (not just best)
   # --best: Report best alignments when using -a
-  bowtie -f -x ${transcriptome_index_prefix} ${primers_fasta} -S primers_alignment.sam -a -l ${params.bowtie_seed_length} -n 3 -v 3 --best 2> alignment_stats.txt
+  bowtie -f -x ${transcriptome_index_prefix} ${primers_fasta} -S primers_alignment.sam -a -l ${params.bowtie_seed_length} -n 3 -v 4 --best 2> alignment_stats.txt
   
   # Convert to BAM and sort
   samtools view -bS primers_alignment.sam | samtools sort -o primers_alignment.bam

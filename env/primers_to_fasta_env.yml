@@ -14,3 +14,6 @@ dependencies:
   - bioconductor-s4vectors
   - bioconductor-iranges
   - bioconductor-xvector
+  # Genome annotation dependencies pulled indirectly by Biostrings/GenomicRanges
+  - bioconductor-genomeinfodb
+  - bioconductor-genomeinfodbdata

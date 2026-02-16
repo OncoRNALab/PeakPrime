@@ -80,8 +80,8 @@ workflow distance_primer_design {
 
     // Optional: Align primers to transcriptome for specificity checking
     if (params.transcriptome_index) {
-      // Validate that index files exist
-      transcriptome_index_files = Channel.fromPath("${params.transcriptome_index}.*.bt2", checkIfExists: true).collect()
+      // Validate that Bowtie1 index files exist (*.ebwt)
+      transcriptome_index_files = Channel.fromPath("${params.transcriptome_index}.*.ebwt", checkIfExists: true).collect()
       
       // Align primers to transcriptome
       alignment_results = ALIGN_PRIMERS_TRANSCRIPTOME(

@@ -43,10 +43,10 @@ workflow primer_design {
     fasta_ch = Channel.value(file('NO_FILE'))
   }
 
-  // Handle optional transcriptome index for primer alignment QC
+  // Handle optional transcriptome index for primer alignment QC (Bowtie1 index)
   if (params.transcriptome_index) {
-    // Validate that index files exist
-    transcriptome_index_files = Channel.fromPath("${params.transcriptome_index}.*.bt2", checkIfExists: true).collect()
+    // Validate that Bowtie1 index files exist (*.ebwt)
+    transcriptome_index_files = Channel.fromPath("${params.transcriptome_index}.*.ebwt", checkIfExists: true).collect()
     transcriptome_index_prefix = params.transcriptome_index
   } else {
     transcriptome_index_prefix = 'NO_INDEX'

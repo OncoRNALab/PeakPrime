@@ -9,6 +9,8 @@
 
 PeakPrime is a Nextflow pipeline that uses **MACS2 peak calling** to identify high-coverage regions in (3' end) RNA-seq data and designs strand-specific cDNA primers with comprehensive quality control and visualization.
 
+This branch (`feature/replace-bowtie2-with-bowtie1`) extends the main PeakPrime pipeline by replacing Bowtie2-based primer specificity checks with **Bowtie1**, which explicitly supports mismatches in the seed region for short primer sequences. Bowtie1 is run permissively (up to 3 mismatches in the seed and 4 mismatches total), and downstream filters (via `--max_mismatches`) classify primers based on how many mismatches their off‑target alignments have, providing a more realistic assessment of primer cross‑reactivity.
+
 ## 📑 Table of Contents
 
 - [Why PeakPrime?](#-why-peakprime)
