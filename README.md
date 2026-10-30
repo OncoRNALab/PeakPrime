@@ -70,7 +70,7 @@ This branch (`feature/replace-bowtie2-with-bowtie1`) extends the main PeakPrime 
 ## 📋 Requirements
 
 - **Nextflow** (≥22.04.0)
-- **Conda/Mamba** for environment management
+- **Conda/Mamba** we recommend using a recent version of conda that incldues libmamba solver for environment management
 - **Input files**:
   - RNA-seq BAM file (indexed)
   - GTF annotation file
