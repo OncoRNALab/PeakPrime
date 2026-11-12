@@ -126,10 +126,31 @@ workflow primer_design {
         )
         optimized_primers = OPTIMIZE_PRIMER_ISOFORMS.out.optimized_primers
       }
+
+      // Always publish a run summary (gene funnel + specificity tables)
+      SUMMARIZE_RESULTS(
+        Channel.fromPath(params.genes, checkIfExists: true),
+        qc_summary,
+        peaks_tsv,
+        cdna_primers,
+        best_primers,
+        optimized_primers,
+        ANALYZE_PRIMER_ALIGNMENTS.out[1]
+      )
     } else {
-      // No transcriptome alignment - create empty channels for emit section
-      best_primers = Channel.empty()
-      optimized_primers = Channel.empty()
+      // No transcriptome alignment
+      best_primers = Channel.value(file('NO_FILE'))
+      optimized_primers = Channel.value(file('NO_FILE'))
+
+      SUMMARIZE_RESULTS(
+        Channel.fromPath(params.genes, checkIfExists: true),
+        qc_summary,
+        peaks_tsv,
+        cdna_primers,
+        best_primers,
+        optimized_primers,
+        Channel.value(file('NO_FILE'))
+      )
     } // End of transcriptome alignment block
 
     // Optional: Generate plots if --makeplots is enabled

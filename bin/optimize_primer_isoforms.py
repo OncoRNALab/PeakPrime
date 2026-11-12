@@ -128,6 +128,25 @@ def build_primer_isoform_mapping(best_primers: pd.DataFrame,
         print(f"  Available columns: {list(alignment_summary.columns)}")
         return {}
     
+    # Map designed primers to intended gene symbol (from select_best_primer)
+    intended_symbol = {}
+    if 'aligned_gene_name' in best_primers.columns:
+        for _, prow in best_primers.iterrows():
+            key = (str(prow['gene_id']), int(prow['primer_index']))
+            if 'peak_id' in best_primers.columns and pd.notna(prow.get('peak_id')):
+                # multi-peak rows still share gene_id+primer_index uniquely per peak via primer_id;
+                # prefer primer_id map when present
+                pass
+            intended_symbol[key] = str(prow['aligned_gene_name'])
+        if 'primer_id' in best_primers.columns:
+            intended_by_pid = dict(
+                zip(best_primers['primer_id'].astype(str), best_primers['aligned_gene_name'].astype(str))
+            )
+        else:
+            intended_by_pid = {}
+    else:
+        intended_by_pid = {}
+
     primer_isoforms = defaultdict(set)
     
     for _, row in alignment_summary.iterrows():
@@ -138,13 +157,23 @@ def build_primer_isoform_mapping(best_primers: pd.DataFrame,
         # Skip if missing data
         if pd.isna(gene_id) or pd.isna(primer_index) or pd.isna(transcript_id):
             continue
+
+        # Only count on-target gene transcripts (not soft off-targets in the relevant window)
+        if 'aligned_gene_name' in alignment_summary.columns:
+            hit_gene = str(row['aligned_gene_name'])
+            intended = None
+            if 'primer_id' in row and str(row.get('primer_id', '')) in intended_by_pid:
+                intended = intended_by_pid[str(row['primer_id'])]
+            else:
+                intended = intended_symbol.get((str(gene_id), int(float(primer_index))))
+            if intended is not None and hit_gene != intended:
+                continue
         
         # Create composite key (gene_id, primer_index)
         composite_key = (gene_id, int(primer_index))
         
         # Add transcript to this primer's set
-        # Note: We already filtered to gene_id matches in alignment_summary
-        # and applied quality filters (mismatches≤threshold, distance threshold)
+        # Alignments were prefiltered to mismatches≤threshold and distance≤threshold
         primer_isoforms[composite_key].add(transcript_id)
     
     # Convert to regular dict

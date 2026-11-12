@@ -2,184 +2,189 @@
 """
 Select best primers from alignment reports.
 
-3-stage filtering strategy for 3' RNA-seq protocols:
-1. Filter by mismatch threshold (≤N mismatches, configurable)
-2. Require distance_to_end <= threshold (protocol-specific relevance)
-3. Require unique gene mapping (specificity, only for relevant hits)
+Specificity policy (3′-end protocols):
+  1. Infer intended gene from 0-mismatch transcriptome hits.
+  2. Consider *relevant* alignments: mismatches ≤ max_mismatches AND
+     distance_to_end ≤ distance_threshold.
+  3. Keep primer only if the intended gene is present in relevant hits and
+     no OTHER gene appears in relevant hits.
 
-This correctly identifies primers that may cross-react with off-targets
-even when the off-target has 1-3 mismatches (which can still amplify).
+Off-targets far from the transcript 3′ end are ignored (not harmful for
+3′-end sequencing). Off-targets near the 3′ end with ≤ max_mismatches reject
+the primer.
 
-Writes out 'best_primers.tsv' in the current working directory.
+Writes 'best_primers.tsv' (or --out).
 """
+from __future__ import annotations
+
 import argparse
-import pandas as pd
 import sys
+from pathlib import Path
+
+import pandas as pd
+
+# Allow importing sibling helper when run as bin/select_best_primer.py
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from primer_specificity import (  # noqa: E402
+    classify_primer,
+    group_alignments_by_primer,
+)
 
 
-def main():
-    p = argparse.ArgumentParser(description='Select best primers with 3-stage filtering')
-    p.add_argument('--report', required=True)
-    p.add_argument('--summary', required=True)
-    p.add_argument('--out', default='best_primers.tsv')
-    p.add_argument('--distance_threshold', type=float, default=1000.0,
-                   help='Maximum distance from 3\' end for alignments to be considered relevant (bp). '
-                        'Default: 1000. Use larger values (e.g., 2000-5000) for more permissive filtering.')
-    p.add_argument('--max_mismatches', type=int, default=0,
-                   help='Maximum mismatches allowed for primer specificity (0-3). '
-                        'Default: 0 (perfect matches only). Use 2-3 to detect primers '
-                        'that may cross-react with off-targets.')
+def _ensure_primer_id(summary: pd.DataFrame) -> pd.DataFrame:
+    if "primer_id" in summary.columns:
+        return summary
+    summary = summary.copy()
+    if "peak_id" in summary.columns and summary["peak_id"].notna().any():
+        need = ["gene_id", "peak_id", "primer_index", "primer_type", "gene_strand"]
+        if all(col in summary.columns for col in need):
+            summary["primer_id"] = (
+                summary["gene_id"].astype(str)
+                + "|"
+                + summary["peak_id"].astype(str)
+                + "|idx"
+                + summary["primer_index"].astype(str)
+                + "|"
+                + summary["primer_type"].astype(str)
+                + "|strand"
+                + summary["gene_strand"].astype(str)
+            )
+            return summary
+    need = ["gene_id", "primer_index", "primer_type", "gene_strand"]
+    if all(col in summary.columns for col in need):
+        summary["primer_id"] = (
+            summary["gene_id"].astype(str)
+            + "|idx"
+            + summary["primer_index"].astype(str)
+            + "|"
+            + summary["primer_type"].astype(str)
+            + "|strand"
+            + summary["gene_strand"].astype(str)
+        )
+        return summary
+    raise ValueError("Cannot construct primer_id from summary columns")
+
+
+def _empty_output(report: pd.DataFrame, out_path: str, extra_cols: list) -> None:
+    cols = list(report.columns) + extra_cols
+    for drop in ("alignment_quality", "best_mapq"):
+        if drop in cols:
+            cols.remove(drop)
+    # de-duplicate while preserving order
+    seen = set()
+    ordered = []
+    for c in cols:
+        if c not in seen:
+            seen.add(c)
+            ordered.append(c)
+    pd.DataFrame(columns=ordered).to_csv(out_path, sep="\t", index=False)
+
+
+def main() -> None:
+    p = argparse.ArgumentParser(description="Select best primers with 3′-aware specificity filtering")
+    p.add_argument("--report", required=True)
+    p.add_argument("--summary", required=True)
+    p.add_argument("--out", default="best_primers.tsv")
+    p.add_argument(
+        "--distance_threshold",
+        type=float,
+        default=1000.0,
+        help="Max distance from transcript 3′ end (bp) for an alignment to count "
+        "as relevant for on-target usefulness or off-target rejection.",
+    )
+    p.add_argument(
+        "--max_mismatches",
+        type=int,
+        default=0,
+        help="Max mismatches for a relevant hit (0-3). Other genes with a relevant "
+        "hit within this mismatch budget reject the primer.",
+    )
     args = p.parse_args()
 
-    report = pd.read_csv(args.report, sep='\t', dtype=str)
+    report = pd.read_csv(args.report, sep="\t", dtype=str)
+    extra_cols = [
+        "aligned_gene_name",
+        "alignments_within_threshold",
+        "distance_to_end_min",
+        "offtarget_genes",
+        "specificity_reason",
+    ]
+
     try:
-        summary = pd.read_csv(args.summary, sep='\t', dtype=str)
+        summary = pd.read_csv(args.summary, sep="\t", dtype=str)
     except Exception:
-        # fallback: use quick heuristic from report (unique alignments only)
-        out = report[report.get('num_alignments', '0').astype(int) == 1].copy()
-        # Remove alignment_quality from fallback output if present
-        if 'alignment_quality' in out.columns:
-            out = out.drop('alignment_quality', axis=1)
-        out.to_csv(args.out, sep='\t', index=False)
-        print(f'Wrote {args.out} (fallback quick filter)')
+        out = report[report.get("num_alignments", "0").astype(int) == 1].copy()
+        for drop in ("alignment_quality", "best_mapq"):
+            if drop in out.columns:
+                out = out.drop(drop, axis=1)
+        out.to_csv(args.out, sep="\t", index=False)
+        print(f"Wrote {args.out} (fallback quick filter)")
         return
 
-    # Normalize columns
-    if 'primer_id' not in summary.columns:
-        # Construct primer_id from components if not present
-        # Check if peak_id column exists (multi-peak mode)
-        if 'peak_id' in summary.columns and summary['peak_id'].notna().any():
-            # Multi-peak mode: include peak_id
-            if all(col in summary.columns for col in ['gene_id', 'peak_id', 'primer_index', 'primer_type', 'gene_strand']):
-                summary['primer_id'] = (summary['gene_id'].astype(str) + "|" +
-                                      summary['peak_id'].astype(str) + "|idx" + 
-                                      summary['primer_index'].astype(str) + "|" + 
-                                      summary['primer_type'].astype(str) + "|strand" + 
-                                      summary['gene_strand'].astype(str))
-            else:
-                print('detailed summary missing required columns for multi-peak primer_id construction; falling back to report heuristic', file=sys.stderr)
-                out = report[report.get('num_alignments', '0').astype(int) == 1].copy()
-                # Remove alignment_quality from fallback output
-                if 'alignment_quality' in out.columns:
-                    out = out.drop('alignment_quality', axis=1)
-                out.to_csv(args.out, sep='\t', index=False)
-                print(f'Wrote {args.out} (fallback quick filter)')
-                return
-        else:
-            # Single-peak mode: original format
-            if all(col in summary.columns for col in ['gene_id', 'primer_index', 'primer_type', 'gene_strand']):
-                summary['primer_id'] = (summary['gene_id'].astype(str) + "|idx" + 
-                                      summary['primer_index'].astype(str) + "|" + 
-                                      summary['primer_type'].astype(str) + "|strand" + 
-                                      summary['gene_strand'].astype(str))
-            else:
-                print('detailed summary missing required columns for primer_id construction; falling back to report heuristic', file=sys.stderr)
-                out = report[report.get('num_alignments', '0').astype(int) == 1].copy()
-                # Remove alignment_quality from fallback output
-                if 'alignment_quality' in out.columns:
-                    out = out.drop('alignment_quality', axis=1)
-                out.to_csv(args.out, sep='\t', index=False)
-                print(f'Wrote {args.out} (fallback quick filter)')
-                return
+    try:
+        summary = _ensure_primer_id(summary)
+    except ValueError as exc:
+        print(f"{exc}; falling back to report heuristic", file=sys.stderr)
+        out = report[report.get("num_alignments", "0").astype(int) == 1].copy()
+        for drop in ("alignment_quality", "best_mapq"):
+            if drop in out.columns:
+                out = out.drop(drop, axis=1)
+        out.to_csv(args.out, sep="\t", index=False)
+        print(f"Wrote {args.out} (fallback quick filter)")
+        return
 
-    # ===== STAGE 1: Filter by mismatch threshold =====
-    print("\n=== 3-STAGE FILTERING FOR 3' RNA-SEQ ===")
+    print("\n=== 3′-AWARE SPECIFICITY FILTERING ===")
     print(f"Total alignments in summary: {len(summary)}")
-    
-    summary['mismatches'] = pd.to_numeric(summary.get('mismatches', 9999), errors='coerce').fillna(9999).astype(int)
-    stage1_filtered = summary[summary['mismatches'] <= args.max_mismatches].copy()
-    
-    print(f"STAGE 1 (mismatches≤{args.max_mismatches}): {len(stage1_filtered)} alignments retained ({len(stage1_filtered)/max(len(summary),1)*100:.1f}%)")
-    
-    if stage1_filtered.empty:
-        print(f"No alignments with ≤{args.max_mismatches} mismatches found. Creating empty output.")
-        cols = list(report.columns) + ['aligned_gene_name', 'alignments_within_threshold', 'distance_to_end_min']
-        if 'alignment_quality' in cols:
-            cols.remove('alignment_quality')
-        if 'best_mapq' in cols:
-            cols.remove('best_mapq')
-        pd.DataFrame(columns=cols).to_csv(args.out, sep='\t', index=False)
-        print(f'Wrote {args.out} (no alignments within mismatch threshold)')
-        return
-    
-    # ===== STAGE 2: Filter by distance to 3' end =====
-    # Convert distance_to_end to numeric, treating "NA" as a very large value (far from end)
-    stage1_filtered['distance_to_end_numeric'] = pd.to_numeric(
-        stage1_filtered.get('distance_to_end', 'NA'), 
-        errors='coerce'
-    ).fillna(float('inf'))  # Treat NA as infinitely far (will be filtered out)
-    
-    stage2_filtered = stage1_filtered[stage1_filtered['distance_to_end_numeric'] <= args.distance_threshold].copy()
-    
-    print(f"STAGE 2 (distance≤{args.distance_threshold}bp from 3' end): {len(stage2_filtered)} alignments retained ({len(stage2_filtered)/len(stage1_filtered)*100:.1f}%)")
-    print(f"  Filtered out: {len(stage1_filtered) - len(stage2_filtered)} alignments too far from 3' end")
-    
-    if stage2_filtered.empty:
-        print(f"No alignments within {args.distance_threshold}bp of 3' end. Creating empty output.")
-        cols = list(report.columns) + ['aligned_gene_name', 'alignments_within_threshold', 'distance_to_end_min']
-        if 'alignment_quality' in cols:
-            cols.remove('alignment_quality')
-        if 'best_mapq' in cols:
-            cols.remove('best_mapq')
-        pd.DataFrame(columns=cols).to_csv(args.out, sep='\t', index=False)
-        print(f'Wrote {args.out} (no alignments near 3\' end)')
-        return
-    
-    # ===== STAGE 3: Require unique gene mapping (only for relevant alignments) =====
+    print(f"max_mismatches={args.max_mismatches}  distance_threshold={args.distance_threshold}bp")
 
-    # ===== STAGE 3: Require unique gene mapping (only for relevant alignments) =====
+    rows = summary.to_dict(orient="records")
+    by_primer = group_alignments_by_primer(rows)
+    print(f"Unique primers in summary: {len(by_primer)}")
+
     selected = []
-    primers_with_multi_gene = []
-    
-    for pid, group in stage2_filtered.groupby('primer_id'):
-        genes = group['aligned_gene_name'].dropna().unique()
-        # require unique gene (only considering alignments near 3' end)
-        if len(genes) == 1:
-            rpt = report[report['primer_id'] == pid]
-            if not rpt.empty:
-                row = rpt.iloc[0].to_dict()
-                if 'alignment_quality' in row:
-                    del row['alignment_quality']
-                if 'best_mapq' in row:
-                    del row['best_mapq']  # Remove meaningless MAPQ
-                row['aligned_gene_name'] = genes[0]
-                row['alignments_within_threshold'] = len(group)
-                # Add minimum distance to 3' end for this primer
-                row['distance_to_end_min'] = int(group['distance_to_end_numeric'].min())
-                selected.append(row)
-        else:
-            primers_with_multi_gene.append((pid, genes))
-    
-    print(f"STAGE 3 (unique gene mapping): {len(selected)} primers retained")
-    print(f"  Filtered out: {len(stage2_filtered.groupby('primer_id')) - len(selected)} primers with multi-gene hits near 3' end")
-    
-    # Show examples of rejected primers
-    if primers_with_multi_gene and len(primers_with_multi_gene) <= 5:
-        print("\n  Examples of multi-gene primers (rejected):")
-        for pid, genes in primers_with_multi_gene:
-            print(f"    {pid}: maps to {len(genes)} genes near 3' end: {', '.join(genes[:3])}")
-    elif len(primers_with_multi_gene) > 5:
-        print(f"\n  {len(primers_with_multi_gene)} primers rejected for multi-gene hits near 3' end")
-    
-    print(f"\n=== FINAL RESULT: {len(selected)} primers passed all filters ===\n")
+    reject_reasons = {}
+    for pid, alns in by_primer.items():
+        verdict = classify_primer(alns, args.max_mismatches, args.distance_threshold)
+        if not verdict["pass"]:
+            reject_reasons[verdict["reason"].split(":")[0]] = (
+                reject_reasons.get(verdict["reason"].split(":")[0], 0) + 1
+            )
+            continue
+
+        rpt = report[report["primer_id"] == pid]
+        if rpt.empty:
+            reject_reasons["missing_report_row"] = reject_reasons.get("missing_report_row", 0) + 1
+            continue
+
+        row = rpt.iloc[0].to_dict()
+        for drop in ("alignment_quality", "best_mapq"):
+            row.pop(drop, None)
+        row["aligned_gene_name"] = verdict["intended_gene"]
+        row["alignments_within_threshold"] = verdict["n_relevant"]
+        row["distance_to_end_min"] = verdict["distance_to_end_min"]
+        row["offtarget_genes"] = ""
+        row["specificity_reason"] = "pass"
+        selected.append(row)
+
+    print(f"PASS: {len(selected)} primers")
+    print("Reject reason counts:")
+    for reason, count in sorted(reject_reasons.items(), key=lambda kv: (-kv[1], kv[0])):
+        print(f"  {reason}: {count}")
 
     if not selected:
-        # write empty with headers to be predictable
-        cols = list(report.columns) + ['aligned_gene_name', 'alignments_within_threshold', 'distance_to_end_min']
-        if 'alignment_quality' in cols:
-            cols.remove('alignment_quality')
-        if 'best_mapq' in cols:
-            cols.remove('best_mapq')
-        pd.DataFrame(columns=cols).to_csv(args.out, sep='\t', index=False)
-        print(f'Wrote {args.out} (no primers passed 3-stage filtering)')
+        _empty_output(report, args.out, extra_cols)
+        print(f"Wrote {args.out} (no primers passed specificity filtering)")
         return
 
     outdf = pd.DataFrame(selected)
-    outdf.to_csv(args.out, sep='\t', index=False)
-    print(f'Wrote {args.out} with {len(outdf)} primers')
-    print(f'  Column "distance_to_end_min" shows closest distance to 3\' end (bp)')
-    print(f'  Column "alignments_within_threshold" shows number of alignments (≤{args.max_mismatches} mismatches) near 3\' end')
+    outdf.to_csv(args.out, sep="\t", index=False)
+    print(f"Wrote {args.out} with {len(outdf)} primers")
+    print("  aligned_gene_name = intended gene (from 0-mismatch hits)")
+    print(
+        f"  alignments_within_threshold = relevant hits "
+        f"(≤{args.max_mismatches} mm and ≤{args.distance_threshold} bp from 3′)"
+    )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

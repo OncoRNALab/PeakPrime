@@ -289,31 +289,33 @@ macs2 callpeak -t file.bam -g hs --bdg --keep-dup auto -q 0.05 --nomodel --extsi
 | `--transcriptome_index` | Bowtie1 transcriptome index prefix |
 | `--transcriptome_fasta` | Transcriptome FASTA for gene mapping |
 | `--max_primers_per_gene` | Maximum primers per gene for QC (default: 20) |
-| `--distance_threshold` | Maximum distance from 3' end for alignments (bp, default: 400) |
-| `--max_mismatches` | Maximum mismatches for primer specificity check (0-3, default: 0) |
+| `--distance_threshold` | Max distance from transcript 3' end for a *relevant* hit (bp, default: 1000) |
+| `--max_mismatches` | Max mismatches for a *relevant* hit (0-3, default: 3) |
 | `--bowtie_seed_length` | Bowtie1 seed length for alignment (bp, default: 15) |
 
 #### Understanding Primer Specificity Filtering
 
-The `--max_mismatches` parameter controls how strictly primers are evaluated for off-target amplification:
+For 3′-end protocols, an alignment is **relevant** only if:
 
-- **`--max_mismatches 0` (default, strict)**: Only considers perfect matches (0 mismatches) when checking primer specificity. This ensures primers will only amplify their intended target gene. However, this may be overly conservative - primers with 2-3 mismatches to off-target genes can still amplify those targets in PCR, but won't be detected as problematic.
+- `mismatches ≤ max_mismatches`, **and**
+- `distance_to_end ≤ distance_threshold`
 
-- **`--max_mismatches 2-3` (recommended)**: Detects primers that have near-perfect matches (≤2-3 mismatches) to off-target genes. This provides more realistic specificity assessment, as primers with just a few mismatches can still cross-react and amplify unintended targets. **Recommended for production use** to avoid false negatives.
+Off-targets **outside** the distance window are ignored (they are not sequenced). A primer is **rejected** if:
 
-**How it works**: The pipeline aligns primers to the transcriptome using Bowtie1 and applies a 3-stage filter:
-1. **Stage 1** (Mismatch filter): Keep only alignments with ≤`max_mismatches` mismatches
-2. **Stage 2** (Distance filter): Among those, keep alignments within `distance_threshold` bp of 3' end
-3. **Stage 3** (Specificity filter): Flag primers that align to multiple genes (non-specific)
+1. It has no 0-mismatch hit (cannot define the intended gene), or
+2. The intended gene has **no** relevant near-3′ hit, or
+3. **Any other gene** has a relevant near-3′ hit (≤ `max_mismatches`)
 
 **Example**:
 ```bash
-# Strict filtering (may miss cross-reactive primers)
-nextflow run main.nf --max_mismatches 0 --distance_threshold 400 ...
+# Default-like (recommended for 3' RNA-seq)
+nextflow run main.nf --max_mismatches 3 --distance_threshold 1000 ...
 
-# Recommended (realistic specificity detection)
-nextflow run main.nf --max_mismatches 2 --distance_threshold 400 ...
+# Stricter mismatch budget
+nextflow run main.nf --max_mismatches 1 --distance_threshold 1000 ...
 ```
+
+Every run also writes `summary/run_summary.txt`, `gene_funnel.tsv`, `primer_specificity.tsv`, and `final_specific_primers.tsv`.
 
 ### Plotting Parameters (for --makeplots mode)
 | Parameter | Description |

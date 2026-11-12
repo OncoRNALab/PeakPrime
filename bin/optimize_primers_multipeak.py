@@ -14,15 +14,18 @@ Strategy:
 - Select top N primers per gene (default: 3)
 - Resolve isoform conflicts across genes (similar to optimize_primer_isoforms.py)
 
-Note: Uses same max_mismatches threshold as select_best_primer.py to ensure
-      consistent primer specificity filtering.
+Specificity: same policy as select_best_primer.py — a hit is relevant if
+mismatches ≤ max_mismatches AND distance_to_end ≤ distance_threshold. Primers
+with any other gene in that relevant window are rejected. Far-from-3′ off-targets
+are ignored (3′-end protocols).
 
 Usage:
     python bin/optimize_primers_multipeak.py \\
         --best_primers best_primers.tsv \\
         --alignment_summary primer_alignment_summary.tsv \\
         --primers_per_gene 3 \\
-        --max_mismatches 0 \\
+        --max_mismatches 3 \\
+        --distance_threshold 1000 \\
         --distance_weight 0.5 \\
         --isoform_weight 0.3 \\
         --peak_rank_weight 0.2 \\
@@ -30,9 +33,18 @@ Usage:
 """
 
 import argparse
-import pandas as pd
 import sys
 from collections import defaultdict
+from pathlib import Path
+
+import pandas as pd
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from primer_specificity import (  # noqa: E402
+    classify_primer,
+    group_alignments_by_primer,
+    relevant_alignments,
+)
 
 
 def parse_gene_peak_id(gene_peak_id):
@@ -152,123 +164,134 @@ class MultiPeakPrimerOptimizer:
         
         return composite
     
-    def load_isoform_mapping(self, alignment_summary_path, max_mismatches=0):
+    def load_isoform_mapping(
+        self,
+        alignment_summary_path,
+        max_mismatches=0,
+        distance_threshold=1000.0,
+        intended_gene_by_primer=None,
+    ):
         """
         Load primer-to-isoform mapping from alignment summary.
-        
-        Args:
-            alignment_summary_path: Path to primer_alignment_summary.tsv
-            max_mismatches: Maximum mismatches for primer specificity (0-3)
-        
-        Returns:
-            dict: {primer_id: set of transcript IDs}
+
+        Only counts transcripts from the intended gene among *relevant* hits
+        (mismatches ≤ max_mismatches AND distance ≤ distance_threshold).
         """
         try:
             summary = pd.read_csv(alignment_summary_path, sep='\t')
         except Exception as e:
             print(f"Warning: Could not load alignment summary: {e}", file=sys.stderr)
             return {}
-        
+
         primer_isoforms = defaultdict(set)
-        
-        # Build mapping of primer_id -> set of transcript IDs with perfect alignment
-        # Check for both possible column names for compatibility
         transcript_col = None
         if 'aligned_transcript' in summary.columns:
             transcript_col = 'aligned_transcript'
         elif 'aligned_transcript_id' in summary.columns:
             transcript_col = 'aligned_transcript_id'
-        
-        if 'primer_id' in summary.columns and transcript_col:
-            # Filter for alignments within mismatch threshold
-            if 'mismatches' in summary.columns:
-                filtered = summary[summary['mismatches'] <= max_mismatches]
-                print(f"Found {len(filtered)} alignment records (mismatches≤{max_mismatches})", file=sys.stderr)
-            else:
-                filtered = summary
-                print("No 'mismatches' column found, using all alignments", file=sys.stderr)
-            
-            for _, row in filtered.iterrows():
-                primer_id = row['primer_id']
-                transcript_id = row.get(transcript_col, None)
-                if transcript_id and pd.notna(transcript_id):
+
+        if 'primer_id' not in summary.columns or not transcript_col:
+            print(
+                f"Warning: Required columns not found. primer_id: "
+                f"{'primer_id' in summary.columns}, transcript_col: {transcript_col}",
+                file=sys.stderr,
+            )
+            return {}
+
+        intended_gene_by_primer = intended_gene_by_primer or {}
+        rows = summary.to_dict(orient='records')
+        by_primer = group_alignments_by_primer(rows)
+        n_relevant = 0
+
+        for primer_id, alns in by_primer.items():
+            intended = intended_gene_by_primer.get(primer_id)
+            if intended is None:
+                verdict = classify_primer(alns, max_mismatches, distance_threshold)
+                intended = verdict.get('intended_gene')
+            if not intended:
+                continue
+            relevant = relevant_alignments(alns, max_mismatches, distance_threshold)
+            for row in relevant:
+                if str(row.get('aligned_gene_name', '')) != str(intended):
+                    continue
+                transcript_id = row.get(transcript_col)
+                if transcript_id is not None and str(transcript_id) != '' and str(transcript_id).upper() != 'NA':
                     primer_isoforms[primer_id].add(transcript_id)
-            
-            print(f"Built isoform mapping for {len(primer_isoforms)} primers", file=sys.stderr)
-        else:
-            print(f"Warning: Required columns not found. primer_id: {'primer_id' in summary.columns}, transcript_col: {transcript_col}", file=sys.stderr)
-        
+                    n_relevant += 1
+
+        print(
+            f"Found {n_relevant} on-target relevant alignment records "
+            f"(mismatches≤{max_mismatches}, distance≤{distance_threshold})",
+            file=sys.stderr,
+        )
+        print(f"Built isoform mapping for {len(primer_isoforms)} primers", file=sys.stderr)
         return dict(primer_isoforms)
-    
-    def filter_multi_gene_primers(self, alignment_summary_path, primer_ids):
+
+    def filter_multi_gene_primers(
+        self,
+        alignment_summary_path,
+        primer_ids,
+        max_mismatches=0,
+        distance_threshold=1000.0,
+    ):
         """
-        Filter out primers that align to multiple distinct genes (non-specific primers).
-        
-        Args:
-            alignment_summary_path: Path to primer_alignment_summary.tsv
-            primer_ids: Set or list of primer IDs to check
-        
-        Returns:
-            set: primer IDs that are gene-specific (single gene only)
+        Keep primers that pass shared 3′-aware specificity classification.
         """
         if not alignment_summary_path:
             print("Warning: No alignment summary provided, cannot filter multi-gene primers", file=sys.stderr)
             return set(primer_ids)
-        
+
         try:
             summary = pd.read_csv(alignment_summary_path, sep='\t')
         except Exception as e:
             print(f"Warning: Could not load alignment summary for filtering: {e}", file=sys.stderr)
             return set(primer_ids)
-        
-        # Check for required columns
+
         if 'primer_id' not in summary.columns or 'aligned_gene_name' not in summary.columns:
             print("Warning: Required columns not found for multi-gene filtering", file=sys.stderr)
             return set(primer_ids)
-        
-        # Filter for perfect matches only
-        if 'mismatches' in summary.columns:
-            summary = summary[summary['mismatches'] == 0].copy()
-        
-        # For each primer, count unique genes
+
+        by_primer = group_alignments_by_primer(summary.to_dict(orient='records'))
         specific_primers = set()
-        multi_gene_primers = []
-        
+        rejected = []
+
         for pid in primer_ids:
-            primer_aligns = summary[summary['primer_id'] == pid]
-            if primer_aligns.empty:
-                # No alignments found - keep the primer (might be a data issue)
+            alns = by_primer.get(pid, [])
+            if not alns:
+                # No alignments found - keep (may be incomplete summary)
                 specific_primers.add(pid)
                 continue
-            
-            genes = primer_aligns['aligned_gene_name'].dropna().unique()
-            if len(genes) == 1:
+            verdict = classify_primer(alns, max_mismatches, distance_threshold)
+            if verdict['pass']:
                 specific_primers.add(pid)
             else:
-                multi_gene_primers.append((pid, len(genes), genes[:5]))  # Store first 5 gene names
-        
-        # Report filtering results
+                rejected.append((pid, verdict['reason'], verdict.get('offtarget_genes') or []))
+
         total_primers = len(primer_ids)
-        filtered_count = len(multi_gene_primers)
-        
+        filtered_count = len(rejected)
         if filtered_count > 0:
-            print(f"\n=== MULTI-GENE PRIMER FILTERING ===")
-            print(f"Filtered out {filtered_count}/{total_primers} primers that align to multiple genes")
-            
-            # Show examples
-            examples = multi_gene_primers[:5]
-            if examples:
-                print(f"\nExamples of filtered multi-gene primers:")
-                for pid, gene_count, genes in examples:
-                    gene_list = ', '.join(str(g) for g in genes)
-                    more = f" (+{gene_count - len(genes)} more)" if gene_count > len(genes) else ""
-                    print(f"  {pid}: {gene_count} genes ({gene_list}{more})")
+            print(f"\n=== MULTI-GENE / OFF-TARGET PRIMER FILTERING ===")
+            print(
+                f"Filtered out {filtered_count}/{total_primers} primers "
+                f"(relevant window: ≤{max_mismatches} mm, ≤{distance_threshold} bp from 3′)"
+            )
+            for pid, reason, genes in rejected[:5]:
+                gene_list = ', '.join(str(g) for g in genes[:5]) if genes else reason
+                print(f"  {pid}: {reason}" + (f" ({gene_list})" if genes else ""))
         else:
-            print(f"\nAll {total_primers} primers are gene-specific (single gene only)")
-        
+            print(f"\nAll {total_primers} primers passed specificity filtering")
+
         return specific_primers
     
-    def optimize(self, best_primers_df, primer_isoforms, primers_per_gene=3, alignment_summary_path=None):
+    def optimize(
+        self,
+        best_primers_df,
+        primer_isoforms,
+        primers_per_gene=3,
+        alignment_summary_path=None,
+        max_mismatches=0,
+        distance_threshold=1000.0,
+    ):
         """
         Select best primers per gene using greedy set cover algorithm.
         
@@ -323,7 +346,12 @@ class MultiPeakPrimerOptimizer:
         # Filter out multi-gene primers
         if alignment_summary_path:
             all_primer_ids = set(best_primers_df['primer_id'].unique())
-            specific_primer_ids = self.filter_multi_gene_primers(alignment_summary_path, all_primer_ids)
+            specific_primer_ids = self.filter_multi_gene_primers(
+                alignment_summary_path,
+                all_primer_ids,
+                max_mismatches=max_mismatches,
+                distance_threshold=distance_threshold,
+            )
             best_primers_df = best_primers_df[best_primers_df['primer_id'].isin(specific_primer_ids)].copy()
         
         print(f"\n=== MULTI-PEAK PRIMER OPTIMIZATION ===")
@@ -520,6 +548,8 @@ def main():
                         help='Weight for peak rank (default: 0.2)')
     parser.add_argument('--max_mismatches', type=int, default=0,
                         help='Maximum mismatches for primer specificity (0-3). Must match select_best_primer.py. Default: 0')
+    parser.add_argument('--distance_threshold', type=float, default=1000.0,
+                        help='Max distance from transcript 3′ end (bp) for relevant hits. Default: 1000')
     
     args = parser.parse_args()
     
@@ -530,6 +560,12 @@ def main():
         print(f"Error loading best_primers file: {e}", file=sys.stderr)
         sys.exit(1)
     
+    intended_by_primer = {}
+    if 'primer_id' in best_primers.columns and 'aligned_gene_name' in best_primers.columns:
+        intended_by_primer = dict(
+            zip(best_primers['primer_id'].astype(str), best_primers['aligned_gene_name'].astype(str))
+        )
+
     # Load isoform mapping if available
     primer_isoforms = {}
     if args.alignment_summary:
@@ -538,7 +574,12 @@ def main():
             isoform_weight=args.isoform_weight,
             peak_rank_weight=args.peak_rank_weight
         )
-        primer_isoforms = optimizer.load_isoform_mapping(args.alignment_summary, args.max_mismatches)
+        primer_isoforms = optimizer.load_isoform_mapping(
+            args.alignment_summary,
+            max_mismatches=args.max_mismatches,
+            distance_threshold=args.distance_threshold,
+            intended_gene_by_primer=intended_by_primer,
+        )
         print(f"Loaded isoform mappings for {len(primer_isoforms)} primers")
     else:
         print("No alignment_summary provided, isoform scoring will be 0")
@@ -553,7 +594,9 @@ def main():
         best_primers, 
         primer_isoforms, 
         args.primers_per_gene,
-        alignment_summary_path=args.alignment_summary
+        alignment_summary_path=args.alignment_summary,
+        max_mismatches=args.max_mismatches,
+        distance_threshold=args.distance_threshold,
     )
     
     # Write output (even if empty, write headers for pipeline compatibility)
